@@ -1113,7 +1113,7 @@ void do_notify_resume(struct pt_regs *regs, unsigned long thread_flags)
 
 	do {
 		trace_android_vh_read_lazy_flag(&thread_lazy_flag, &thread_flags);
-		if ((thread_flags & _TIF_NEED_RESCHED) || thread_lazy_flag) {
+		if ((thread_flags & _TIF_NEED_RESCHED_MASK) || thread_lazy_flag) {
 			/* Unmask Debug and SError for the next task */
 			local_daif_restore(DAIF_PROCCTX_NOIRQ);
 
