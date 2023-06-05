@@ -451,7 +451,17 @@ static struct platform_driver rk808_rtc_driver = {
 	},
 };
 
-module_platform_driver(rk808_rtc_driver);
+static int __init rk808_rtc_driver_init(void)
+{
+	return platform_driver_register(&rk808_rtc_driver);
+}
+late_initcall(rk808_rtc_driver_init);
+
+static void __exit rk808_rtc_driver_exit(void)
+{
+	platform_driver_unregister(&rk808_rtc_driver);
+}
+module_exit(rk808_rtc_driver_exit);
 
 MODULE_DESCRIPTION("RTC driver for the rk808 series PMICs");
 MODULE_AUTHOR("Chris Zhong <zyw@rock-chips.com>");
