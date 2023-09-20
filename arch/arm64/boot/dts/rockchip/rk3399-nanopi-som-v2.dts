@@ -1,0 +1,22 @@
+// SPDX-License-Identifier: (GPL-2.0+ OR MIT)
+/*
+ * Copyright (c) 2023 FriendlyElec Computer Tech. Co., Ltd.
+ * (http://www.friendlyelec.com)
+ */
+
+/dts-v1/;
+#include "rk3399-nanopi-som.dts"
+
+/ {
+	model = "FriendlyElec SOM-RK3399";
+	compatible = "friendlyelec,som-rk3399", "rockchip,rk3399";
+};
+
+&mach {
+	hwrev = <7>;
+	model = "SOM-RK3399";
+};
+
+&vdd_center {
+	regulator-init-microvolt = <930000>;
+};
