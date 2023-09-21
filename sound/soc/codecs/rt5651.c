@@ -10,6 +10,7 @@
 #include <linux/init.h>
 #include <linux/delay.h>
 #include <linux/pm.h>
+#include <linux/clk.h>
 #include <linux/gpio/consumer.h>
 #include <linux/i2c.h>
 #include <linux/regmap.h>
@@ -1304,7 +1305,7 @@ static int rt5651_hw_params(struct snd_pcm_substream *substream,
 	dev_dbg(dai->dev, "bclk is %dHz and lrck is %dHz\n",
 		rt5651->bclk[dai->id], rt5651->lrck[dai->id]);
 	dev_dbg(dai->dev, "bclk_ms is %d and pre_div is %d for iis %d\n",
-				bclk_ms, pre_div, dai->id);
+		bclk_ms, pre_div, dai->id);
 
 	switch (params_width(params)) {
 	case 16:
@@ -1421,6 +1422,8 @@ static int rt5651_set_dai_sysclk(struct snd_soc_dai *dai,
 	switch (clk_id) {
 	case RT5651_SCLK_S_MCLK:
 		reg_val |= RT5651_SCLK_SRC_MCLK;
+		if (!IS_ERR(rt5651->mclk))
+			clk_set_rate(rt5651->mclk, freq);
 		break;
 	case RT5651_SCLK_S_PLL1:
 		reg_val |= RT5651_SCLK_SRC_PLL1;
@@ -1474,11 +1477,11 @@ static int rt5651_set_dai_pll(struct snd_soc_dai *dai, int pll_id, int source,
 		break;
 	case RT5651_PLL1_S_BCLK1:
 		snd_soc_component_update_bits(component, RT5651_GLB_CLK,
-				RT5651_PLL1_SRC_MASK, RT5651_PLL1_SRC_BCLK1);
+			RT5651_PLL1_SRC_MASK, RT5651_PLL1_SRC_BCLK1);
 		break;
 	case RT5651_PLL1_S_BCLK2:
-			snd_soc_component_update_bits(component, RT5651_GLB_CLK,
-				RT5651_PLL1_SRC_MASK, RT5651_PLL1_SRC_BCLK2);
+		snd_soc_component_update_bits(component, RT5651_GLB_CLK,
+			RT5651_PLL1_SRC_MASK, RT5651_PLL1_SRC_BCLK2);
 		break;
 	default:
 		dev_err(component->dev, "Unknown PLL source %d\n", source);
@@ -1511,9 +1514,13 @@ static int rt5651_set_dai_pll(struct snd_soc_dai *dai, int pll_id, int source,
 static int rt5651_set_bias_level(struct snd_soc_component *component,
 			enum snd_soc_bias_level level)
 {
+	struct rt5651_priv *rt5651 = snd_soc_component_get_drvdata(component);
+
 	switch (level) {
 	case SND_SOC_BIAS_PREPARE:
 		if (SND_SOC_BIAS_STANDBY == snd_soc_component_get_bias_level(component)) {
+			if (!IS_ERR(rt5651->mclk))
+				clk_prepare_enable(rt5651->mclk);
 			if (snd_soc_component_read(component, RT5651_PLL_MODE_1) & 0x9200)
 				snd_soc_component_update_bits(component, RT5651_D_MISC,
 						    0xc00, 0xc00);
@@ -1531,6 +1538,9 @@ static int rt5651_set_bias_level(struct snd_soc_component *component,
 				RT5651_PWR_FV1 | RT5651_PWR_FV2,
 				RT5651_PWR_FV1 | RT5651_PWR_FV2);
 			snd_soc_component_update_bits(component, RT5651_D_MISC, 0x1, 0x1);
+		} else if (SND_SOC_BIAS_PREPARE == snd_soc_component_get_bias_level(component)) {
+			if (!IS_ERR(rt5651->mclk))
+				clk_disable_unprepare(rt5651->mclk);
 		}
 		break;
 
@@ -2061,12 +2071,22 @@ static int rt5651_probe(struct snd_soc_component *component)
 
 	rt5651->component = component;
 
+	rt5651->mclk = devm_clk_get_optional(component->dev, "mclk");
+	if (PTR_ERR(rt5651->mclk) == -EPROBE_DEFER)
+		return -EPROBE_DEFER;
+
 	snd_soc_component_update_bits(component, RT5651_PWR_ANLG1,
 		RT5651_PWR_LDO_DVO_MASK, RT5651_PWR_LDO_DVO_1_2V);
 
 	snd_soc_component_force_bias_level(component, SND_SOC_BIAS_OFF);
 
 	rt5651_apply_properties(component);
+
+	if (rt5651->jd_src == RT5651_JD_NULL) {
+		snd_soc_component_force_enable_pin(component, "LDO");
+		snd_soc_component_force_enable_pin(component, "micbias1");
+		snd_soc_dapm_sync(snd_soc_component_get_dapm(component));
+	}
 
 	return 0;
 }
@@ -2104,6 +2124,7 @@ static const struct snd_soc_dai_ops rt5651_aif_dai_ops = {
 	.set_fmt = rt5651_set_dai_fmt,
 	.set_sysclk = rt5651_set_dai_sysclk,
 	.set_pll = rt5651_set_dai_pll,
+	.no_capture_mute = 1,
 };
 
 static struct snd_soc_dai_driver rt5651_dai[] = {
@@ -2273,6 +2294,13 @@ static int rt5651_i2c_probe(struct i2c_client *i2c)
 	return ret;
 }
 
+static void rt5651_i2c_shutdown(struct i2c_client *client)
+{
+	struct rt5651_priv *rt5651 = i2c_get_clientdata(client);
+
+	regmap_write(rt5651->regmap, RT5651_RESET, 0);
+}
+
 static struct i2c_driver rt5651_i2c_driver = {
 	.driver = {
 		.name = "rt5651",
@@ -2280,6 +2308,7 @@ static struct i2c_driver rt5651_i2c_driver = {
 		.of_match_table = of_match_ptr(rt5651_of_match),
 	},
 	.probe_new = rt5651_i2c_probe,
+	.shutdown = rt5651_i2c_shutdown,
 	.id_table = rt5651_i2c_id,
 };
 module_i2c_driver(rt5651_i2c_driver);
