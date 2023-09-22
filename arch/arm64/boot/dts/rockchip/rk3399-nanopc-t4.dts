@@ -32,6 +32,17 @@
 		vin-supply = <&vcc5v0_sys>;
 	};
 
+	vcc3v3_pcie: vcc3v3-pcie-regulator {
+		compatible = "regulator-fixed";
+		regulator-boot-on;
+		regulator-min-microvolt = <3300000>;
+		regulator-max-microvolt = <3300000>;
+		regulator-name = "vcc3v3_pcie";
+		enable-active-high;
+		gpios = <&gpio2 RK_PA4 GPIO_ACTIVE_HIGH>;
+		vin-supply = <&vcc3v3_sys>;
+	};
+
 	adc-keys {
 		compatible = "adc-keys";
 		io-channels = <&saradc 1>;
@@ -100,9 +111,9 @@
 };
 
 &pcie0 {
-	ep-gpios = <&gpio2 RK_PA4 GPIO_ACTIVE_HIGH>;
 	num-lanes = <4>;
-	vpcie3v3-supply = <&vcc3v3_sys>;
+	max-link-speed = <2>;
+	vpcie3v3-supply = <&vcc3v3_pcie>;
 };
 
 &pinctrl {
