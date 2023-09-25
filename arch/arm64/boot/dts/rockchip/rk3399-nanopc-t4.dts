@@ -110,6 +110,29 @@
 	model = "NanoPC-T4";
 };
 
+&i2s0_2ch_bus {
+	rockchip,pins =
+		<3 RK_PD0 1 &pcfg_pull_none>,
+		<3 RK_PD1 1 &pcfg_pull_none>,
+		<3 RK_PD2 1 &pcfg_pull_none>,
+		<3 RK_PD3 1 &pcfg_pull_none>,
+		<3 RK_PD7 1 &pcfg_pull_none>;
+};
+
+&i2s0 {
+	status = "okay";
+	pinctrl-names = "default";
+	pinctrl-0 = <&i2s0_2ch_bus>;
+	/delete-property/ pinctrl-1;
+	rockchip,playback-channels = <2>;
+	rockchip,capture-channels = <2>;
+	#sound-dai-cells = <0>;
+};
+
+&i2s1 {
+	status = "disabled";
+};
+
 &pcie0 {
 	num-lanes = <4>;
 	max-link-speed = <2>;
@@ -122,6 +145,20 @@
 			/* external pullup to VCC3V3_SYS, despite being 1.8V :/ */
 			rockchip,pins = <0 RK_PA6 1 &pcfg_pull_none>;
 		};
+	};
+};
+
+&rt5651 {
+	status = "okay";
+};
+
+&rt5651_card {
+	status = "okay";
+	pinctrl-names = "default";
+	pinctrl-0 = <&hp_det>;
+	simple-audio-card,hp-det-gpio = <&gpio4 RK_PD4 GPIO_ACTIVE_HIGH>;
+	simple-audio-card,cpu {
+		sound-dai = <&i2s0>;
 	};
 };
 

@@ -121,6 +121,17 @@
 	};
 };
 
+&rt5651 {
+	status = "okay";
+};
+
+&rt5651_card {
+	status = "okay";
+	pinctrl-names = "default";
+	pinctrl-0 = <&hp_det>;
+	simple-audio-card,hp-det-gpio = <&gpio4 RK_PD4 GPIO_ACTIVE_HIGH>;
+};
+
 &sdhci {
 	mmc-hs400-1_8v;
 	mmc-hs400-enhanced-strobe;

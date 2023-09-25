@@ -10,7 +10,7 @@
 
 / {
 	model = "FriendlyElec NanoPi M4B";
-	compatible = "friendlyarm,nanopi-m4b", "rockchip,rk3399";
+	compatible = "friendlyelec,nanopi-m4b", "rockchip,rk3399";
 
 	adc-keys {
 		compatible = "adc-keys";
@@ -32,6 +32,14 @@
 
 &i2c4 {
 	status = "disabled";
+};
+
+&rt5651 {
+	status = "okay";
+};
+
+&rt5651_card {
+	status = "okay";
 };
 
 &u2phy0_host {

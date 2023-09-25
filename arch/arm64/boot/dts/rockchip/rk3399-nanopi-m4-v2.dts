@@ -1,0 +1,22 @@
+// SPDX-License-Identifier: (GPL-2.0+ OR MIT)
+/*
+ * Copyright (c) 2023 FriendlyElec Computer Tech. Co., Ltd.
+ * (http://www.friendlyelec.com)
+ */
+
+/dts-v1/;
+#include "rk3399-nanopi-som.dts"
+
+/ {
+	model = "FriendlyElec NanoPi M4 Ver2.0";
+	compatible = "friendlyelec,nanopi-m4", "rockchip,rk3399";
+};
+
+&mach {
+	hwrev = <0x21>;
+	model = "NanoPi M4";
+};
+
+&vdd_center {
+	regulator-init-microvolt = <930000>;
+};

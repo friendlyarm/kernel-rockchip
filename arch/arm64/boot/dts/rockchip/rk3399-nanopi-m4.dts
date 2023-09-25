@@ -49,8 +49,16 @@
 };
 
 &mach {
-	hwrev = <0x21>;
+	hwrev = <1>;
 	model = "NanoPi M4";
+};
+
+&rt5651 {
+	status = "okay";
+};
+
+&rt5651_card {
+	status = "okay";
 };
 
 &vcc3v3_sys {
