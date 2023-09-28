@@ -170,8 +170,8 @@
 	phy-supply = <&vdd_5v>;
 };
 
-&u2phy1_host {
-	status = "disabled";
+&u2phy1_otg {
+	phy-supply = <&vdd_5v>;
 };
 
 &uart0 {

@@ -54,6 +54,10 @@
 	phy-supply = <&vcc5v0_usb1>;
 };
 
+&usbdrd_dwc3_0 {
+	extcon = <&u2phy0>;
+};
+
 &vbus_typec {
 	enable-active-high;
 	gpios = <&gpio4 RK_PD2 GPIO_ACTIVE_HIGH>;
