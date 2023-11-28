@@ -1,0 +1,176 @@
+// SPDX-License-Identifier: (GPL-2.0+ OR MIT)
+/*
+ * Copyright (c) 2023 FriendlyElec Computer Tech. Co., Ltd.
+ * (http://www.friendlyarm.com)
+ */
+
+/dts-v1/;
+#include "rk3328-nanopi-r2-common.dtsi"
+
+/ {
+	model = "FriendlyElec NanoPi R2S Plus";
+	compatible = "friendlyelec,nanopi-r2", "rockchip,rk3328";
+
+	vcc_rtl8153: vcc-rtl8153-regulator {
+		compatible = "regulator-fixed";
+		gpio = <&gpio2 RK_PC6 GPIO_ACTIVE_HIGH>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&usb30_en_drv>;
+		regulator-always-on;
+		regulator-name = "vcc_rtl8153";
+		regulator-min-microvolt = <5000000>;
+		regulator-max-microvolt = <5000000>;
+		off-on-delay-us = <5000>;
+		enable-active-high;
+	};
+};
+
+&emmc {
+	status = "okay";
+};
+
+&mach {
+	hwrev = <0x24>;
+	model = "NanoPi R2S Plus";
+};
+
+&rgmiim1_pins {
+	rockchip,pins =
+		/* mac_txclk */
+		<1 RK_PB4 2 &pcfg_pull_none_8ma>,
+		/* mac_rxclk */
+		<1 RK_PB5 2 &pcfg_pull_none>,
+		/* mac_mdio */
+		<1 RK_PC3 2 &pcfg_pull_none_2ma>,
+		/* mac_txen */
+		<1 RK_PD1 2 &pcfg_pull_none_8ma>,
+		/* mac_clk */
+		<1 RK_PC5 2 &pcfg_pull_none_2ma>,
+		/* mac_rxdv */
+		<1 RK_PC6 2 &pcfg_pull_none>,
+		/* mac_mdc */
+		<1 RK_PC7 2 &pcfg_pull_none_2ma>,
+		/* mac_rxd1 */
+		<1 RK_PB2 2 &pcfg_pull_none>,
+		/* mac_rxd0 */
+		<1 RK_PB3 2 &pcfg_pull_none>,
+		/* mac_txd1 */
+		<1 RK_PB0 2 &pcfg_pull_none_8ma>,
+		/* mac_txd0 */
+		<1 RK_PB1 2 &pcfg_pull_none_8ma>,
+		/* mac_rxd3 */
+		<1 RK_PB6 2 &pcfg_pull_none>,
+		/* mac_rxd2 */
+		<1 RK_PB7 2 &pcfg_pull_none>,
+		/* mac_txd3 */
+		<1 RK_PC0 2 &pcfg_pull_none_8ma>,
+		/* mac_txd2 */
+		<1 RK_PC1 2 &pcfg_pull_none_8ma>,
+
+		/* mac_txclk */
+		<0 RK_PB0 1 &pcfg_pull_none>,
+		/* mac_txen */
+		<0 RK_PB4 1 &pcfg_pull_none>,
+		/* mac_clk */
+		<0 RK_PD0 1 &pcfg_pull_none>,
+		/* mac_txd1 */
+		<0 RK_PC0 1 &pcfg_pull_none>,
+		/* mac_txd0 */
+		<0 RK_PC1 1 &pcfg_pull_none>,
+		/* mac_txd3 */
+		<0 RK_PC7 1 &pcfg_pull_none>,
+		/* mac_txd2 */
+		<0 RK_PC6 1 &pcfg_pull_none>;
+};
+
+/delete-node/ &rtl8211e;
+
+&gmac2io {
+	phy-handle = <&ethphy1>;
+	snps,reset-delays-us = <0 15000 50000>;
+	tx_delay = <0x22>;
+	rx_delay = <0x12>;
+
+	mdio {
+		compatible = "snps,dwmac-mdio";
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		ethphy1: ethernet-phy@1 {
+			compatible = "ethernet-phy-ieee802.3-c22";
+			reg = <0x1>;
+			realtek,ledsel = <0xae00>;
+		};
+	};
+};
+
+&leds {
+	status = "okay";
+
+	led@2 {
+		gpios = <&gpio2 RK_PB7 GPIO_ACTIVE_HIGH>;
+		label = "lan_led";
+	};
+
+	led@3 {
+		gpios = <&gpio2 RK_PC2 GPIO_ACTIVE_HIGH>;
+		label = "wan_led";
+	};
+};
+
+&leds_gpio {
+	rockchip,pins =
+		<0 RK_PA2 RK_FUNC_GPIO &pcfg_pull_none>,
+		<2 RK_PB7 RK_FUNC_GPIO &pcfg_pull_none>,
+		<2 RK_PC2 RK_FUNC_GPIO &pcfg_pull_none>;
+};
+
+&vccio_sd {
+	status = "okay";
+};
+
+&io_domains {
+	vccio3-supply = <&vccio_sd>;
+};
+
+&sdmmc {
+	vqmmc-supply = <&vccio_sd>;
+	max-frequency = <150000000>;
+	sd-uhs-sdr50;
+	sd-uhs-sdr104;
+	status = "okay";
+};
+
+&sdmmc_ext {
+	vmmc-supply = <&vcc_io>;
+	vqmmc-supply = <&vcc_18>;
+	max-frequency = <150000000>;
+	sd-uhs-sdr104;
+	status = "okay";
+
+	/delete-node/ bcrmf@1;
+	rtl8822cs@1 {
+		reg = <1>;
+		compatible = "realtek,rtl8822cs";
+	};
+};
+
+&sdmmc0ext_clk {
+	rockchip,pins = <3 RK_PA2 3 &pcfg_pull_none_8ma>;
+};
+
+&sdmmc0ext_cmd {
+	rockchip,pins = <3 RK_PA0 3 &pcfg_pull_up_8ma>;
+};
+
+&sdmmc0ext_bus4 {
+	rockchip,pins =
+		<3 RK_PA4 3 &pcfg_pull_up_8ma>,
+		<3 RK_PA5 3 &pcfg_pull_up_8ma>,
+		<3 RK_PA6 3 &pcfg_pull_up_8ma>,
+		<3 RK_PA7 3 &pcfg_pull_up_8ma>;
+};
+
+&sdio_pwrseq {
+	status = "okay";
+};
