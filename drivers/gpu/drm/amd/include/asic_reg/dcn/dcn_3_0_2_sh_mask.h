@@ -52401,7 +52401,10 @@
 #define DC_PERFMON25_PERFMON_LOW__PERFMON_LOW__SHIFT                                                          0x0
 #define DC_PERFMON25_PERFMON_LOW__PERFMON_LOW_MASK                                                            0xFFFFFFFFL
 
-
+// addressBlock: dce_dc_hpo_hpo_top_dispdec
+//HPO_TOP_CLOCK_CONTROL
+#define HPO_TOP_CLOCK_CONTROL__HPO_HDMISTREAMCLK_GATE_DIS__SHIFT                                              0x9
+#define HPO_TOP_CLOCK_CONTROL__HPO_HDMISTREAMCLK_GATE_DIS_MASK                                                0x00000200L
 
 // addressBlock: dce_dc_hpo_hpo_dcperfmon_dc_perfmon_dispdec
 //DC_PERFMON26_PERFCOUNTER_CNTL

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 #ifndef _dcn_3_0_0_SH_MASK_HEADER
 #define _dcn_3_0_0_SH_MASK_HEADER
 
@@ -60665,7 +60666,12 @@
 #define DME6_DME_MEMORY_CONTROL__DME_MEM_PWR_STATE_MASK                                                       0x00000300L
 #define DME6_DME_MEMORY_CONTROL__DME_MEM_DEFAULT_MEM_LOW_POWER_STATE_MASK                                     0x00003000L
 
+// addressBlock: dce_dc_hpo_hpo_top_dispdec
+//HPO_TOP_CLOCK_CONTROL
+#define HPO_TOP_CLOCK_CONTROL__HPO_HDMISTREAMCLK_GATE_DIS__SHIFT                                              0x9
+#define HPO_TOP_CLOCK_CONTROL__HPO_HDMISTREAMCLK_GATE_DIS_MASK                                                0x00000200L
 
+// addressBlock: dce_dc_hpo_hpo_dcperfmon_dc_perfmon_dispdec
 //DC_PERFMON29_PERFCOUNTER_CNTL
 #define DC_PERFMON29_PERFCOUNTER_CNTL__PERFCOUNTER_EVENT_SEL__SHIFT                                           0x0
 #define DC_PERFMON29_PERFCOUNTER_CNTL__PERFCOUNTER_CVALUE_SEL__SHIFT                                          0x9
