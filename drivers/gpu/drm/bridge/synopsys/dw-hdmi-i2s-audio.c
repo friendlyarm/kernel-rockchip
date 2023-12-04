@@ -199,6 +199,11 @@ static int snd_dw_hdmi_probe(struct platform_device *pdev)
 	pdata.max_i2s_channels	= 8;
 	pdata.data		= audio;
 
+	if (IS_ENABLED(CONFIG_ARCH_ROCKCHIP)) {
+		pdata.no_i2s_capture	= 1;
+		pdata.no_spdif_capture	= 1;
+	}
+
 	memset(&pdevinfo, 0, sizeof(pdevinfo));
 	pdevinfo.parent		= pdev->dev.parent;
 	pdevinfo.id		= PLATFORM_DEVID_AUTO;
