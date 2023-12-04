@@ -720,6 +720,10 @@
 	status = "okay";
 };
 
+&crypto1 {
+	status = "disabled";
+};
+
 &rng {
 	status = "okay";
 };
