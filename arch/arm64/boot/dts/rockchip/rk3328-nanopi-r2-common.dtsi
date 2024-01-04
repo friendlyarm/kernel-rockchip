@@ -434,6 +434,10 @@
 	pmuio-supply = <&vcc_io>;
 };
 
+&crypto {
+	status = "disabled";
+};
+
 &rng {
 	status = "okay";
 };
