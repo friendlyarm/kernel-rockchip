@@ -704,6 +704,16 @@ struct ropll_config {
 	u8 cd_tx_ser_rate_sel;
 };
 
+struct phy_config {
+	unsigned long pixelclk;
+	u8 tx_ctrl_ln0;
+	u8 tx_ctrl_ln1;
+	u8 tx_ctrl_ln2;
+	u8 tx_ctrl_ln3;
+};
+
+#define PHY_TAB_LEN		5
+
 struct rockchip_hdptx_phy {
 	struct device *dev;
 	struct regmap *regmap;
@@ -826,6 +836,67 @@ static const struct ffe_cfg ffe_cfg_table[FFE_CFG_TAB_LEN] = {
 	{ 0x3, 0x8 },
 	{ 0x3, 0x9 },
 };
+
+static int rockchip_hdptx_parse_phy_table(struct rockchip_hdptx_phy *hdptx)
+{
+	struct device_node *np = hdptx->dev->of_node;
+	struct phy_config *phy_cfg;
+	u32 *phy_table;
+	int i, num_cfg;
+
+	if (of_get_property(np, "rockchip,phy-table", &i)) {
+		phy_table = kmalloc(i, GFP_KERNEL);
+		if (!phy_table)
+			return -ENOMEM;
+
+		num_cfg = i / (sizeof(u32) * PHY_TAB_LEN);
+		phy_cfg = devm_kmalloc(hdptx->dev,
+				       sizeof(*phy_cfg) * (num_cfg + 1), GFP_KERNEL);
+		if (!phy_cfg) {
+			kfree(phy_table);
+			return -ENOMEM;
+		}
+
+		of_property_read_u32_array(np, "rockchip,phy-table",
+					   phy_table, i / sizeof(u32));
+
+		for (i = 0; i < num_cfg; i++) {
+			if (phy_table[i * PHY_TAB_LEN] != 0)
+				phy_cfg[i].pixelclk = phy_table[i * PHY_TAB_LEN];
+			else
+				phy_cfg[i].pixelclk = ~0UL;
+			phy_cfg[i].tx_ctrl_ln0 = (u8)phy_table[i * PHY_TAB_LEN + 1];
+			phy_cfg[i].tx_ctrl_ln1 = (u8)phy_table[i * PHY_TAB_LEN + 2];
+			phy_cfg[i].tx_ctrl_ln2 = (u8)phy_table[i * PHY_TAB_LEN + 3];
+			phy_cfg[i].tx_ctrl_ln3 = (u8)phy_table[i * PHY_TAB_LEN + 4];
+		}
+
+		phy_cfg[i].pixelclk = ~0UL;
+		hdptx->phy_cfg = phy_cfg;
+
+		kfree(phy_table);
+	}
+
+	return 0;
+}
+
+static void rockchip_hdptx_get_tx_ctrl(struct rockchip_hdptx_phy *hdptx, u8 *tx_ctrl)
+{
+	struct phy_config *pcfg = hdptx->phy_cfg;
+
+	if (!pcfg || !tx_ctrl)
+		return;
+
+	for (; pcfg->pixelclk != ~0UL; pcfg++) {
+		if (hdptx->rate <= pcfg->pixelclk) {
+			tx_ctrl[0] = pcfg->tx_ctrl_ln0;
+			tx_ctrl[1] = pcfg->tx_ctrl_ln1;
+			tx_ctrl[2] = pcfg->tx_ctrl_ln2;
+			tx_ctrl[3] = pcfg->tx_ctrl_ln3;
+			return;
+		}
+	}
+}
 
 static bool rockchip_hdptx_phy_is_accissible_reg(struct device *dev,
 						 unsigned int reg)
@@ -1351,6 +1422,9 @@ static int hdptx_ropll_cmn_config(struct rockchip_hdptx_phy *hdptx, unsigned lon
 static int hdptx_ropll_tmds_mode_config(struct rockchip_hdptx_phy *hdptx, u32 rate)
 {
 	u32 bit_rate = rate & DATA_RATE_MASK;
+	u8 tx_ctrl[4] = { 0x2f, 0x2f, 0x2f, 0x2f };
+
+	rockchip_hdptx_get_tx_ctrl(hdptx, tx_ctrl);
 
 	hdptx_write(hdptx, SB_REG0114, 0x00);
 	hdptx_write(hdptx, SB_REG0115, 0x00);
@@ -1440,10 +1514,11 @@ static int hdptx_ropll_tmds_mode_config(struct rockchip_hdptx_phy *hdptx, u32 ra
 	hdptx_write(hdptx, LANE_REG061F, 0x15);
 	hdptx_write(hdptx, LANE_REG0620, 0xa0);
 
-	hdptx_write(hdptx, LANE_REG0303, 0x2f);
-	hdptx_write(hdptx, LANE_REG0403, 0x2f);
-	hdptx_write(hdptx, LANE_REG0503, 0x2f);
-	hdptx_write(hdptx, LANE_REG0603, 0x2f);
+	hdptx_write(hdptx, LANE_REG0303, tx_ctrl[0]);
+	hdptx_write(hdptx, LANE_REG0403, tx_ctrl[1]);
+	hdptx_write(hdptx, LANE_REG0503, tx_ctrl[2]);
+	hdptx_write(hdptx, LANE_REG0603, tx_ctrl[3]);
+
 	hdptx_write(hdptx, LANE_REG0305, 0x03);
 	hdptx_write(hdptx, LANE_REG0405, 0x03);
 	hdptx_write(hdptx, LANE_REG0505, 0x03);
@@ -1850,6 +1925,7 @@ static int hdptx_lcpll_ropll_frl_mode_config(struct rockchip_hdptx_phy *hdptx)
 	hdptx_write(hdptx, LANE_REG0403, 0x2f);
 	hdptx_write(hdptx, LANE_REG0503, 0x2f);
 	hdptx_write(hdptx, LANE_REG0603, 0x2f);
+
 	hdptx_write(hdptx, LANE_REG0305, 0x03);
 	hdptx_write(hdptx, LANE_REG0405, 0x03);
 	hdptx_write(hdptx, LANE_REG0505, 0x03);
@@ -1953,6 +2029,7 @@ static int hdptx_lcpll_frl_mode_config(struct rockchip_hdptx_phy *hdptx, u32 rat
 	hdptx_write(hdptx, LANE_REG0403, 0x2f);
 	hdptx_write(hdptx, LANE_REG0503, 0x2f);
 	hdptx_write(hdptx, LANE_REG0603, 0x2f);
+
 	hdptx_write(hdptx, LANE_REG0305, 0x03);
 	hdptx_write(hdptx, LANE_REG0405, 0x03);
 	hdptx_write(hdptx, LANE_REG0505, 0x03);
@@ -2381,6 +2458,8 @@ static int rockchip_hdptx_phy_probe(struct platform_device *pdev)
 		ret = PTR_ERR(hdptx->phy);
 		goto err_regsmap;
 	}
+
+	rockchip_hdptx_parse_phy_table(hdptx);
 
 	phy_set_drvdata(hdptx->phy, hdptx);
 
