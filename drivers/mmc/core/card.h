@@ -280,6 +280,11 @@ static inline int mmc_card_broken_sd_cache(const struct mmc_card *c)
 	return c->quirks & MMC_QUIRK_BROKEN_SD_CACHE;
 }
 
+static inline int mmc_card_broken_cache_flush(const struct mmc_card *c)
+{
+	return c->quirks & MMC_QUIRK_BROKEN_CACHE_FLUSH;
+}
+
 static inline int mmc_card_broken_rocr_s18a(const struct mmc_card *c)
 {
 	return c->quirks & MMC_QUIRK_BROKEN_ROCR_S18A;

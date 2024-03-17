@@ -422,6 +422,8 @@ static int rtl8211f_config_init(struct phy_device *phydev)
 			val_rxdly ? "enabled" : "disabled");
 	}
 
+	rtl821x_led_of_init(phydev);
+
 	if (priv->has_phycr2) {
 		ret = phy_modify_paged(phydev, 0xa43, RTL8211F_PHYCR2,
 				       RTL8211F_CLKOUT_EN, priv->phycr2);
@@ -430,11 +432,11 @@ static int rtl8211f_config_init(struct phy_device *phydev)
 				ERR_PTR(ret));
 			return ret;
 		}
+
+		return genphy_soft_reset(phydev);
 	}
 
-	rtl821x_led_of_init(phydev);
-
-	return genphy_soft_reset(phydev);
+	return 0;
 }
 
 static int rtl821x_suspend(struct phy_device *phydev)
