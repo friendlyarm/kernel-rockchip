@@ -5,7 +5,7 @@
  */
 
 /dts-v1/;
-#include "rk3399-nanopi-som.dts"
+#include "rk3399-nanopi-m4.dts"
 
 / {
 	model = "FriendlyElec NanoPi M4 Ver2.0";
