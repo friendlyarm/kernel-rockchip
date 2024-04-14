@@ -104,7 +104,7 @@ static struct rk_partition *newpart(char *s, char **retptr,
 	parts[this_part].size = size;
 	parts[this_part].from = from;
 	if (name) {
-		strlcpy(extra_mem, name, name_len + 1);
+		strscpy(extra_mem, name, name_len + 1);
 	} else {
 		sprintf(extra_mem, "Partition_%03d", this_part);
 	}
@@ -181,7 +181,7 @@ static int rkpart_setup_real(char *s)
 		this_rk->parts = parts;
 		this_rk->num_parts = num_parts;
 		this_rk->rk_id = (char*)(this_rk + 1);
-		strlcpy(this_rk->rk_id, rk_id, rk_id_len + 1);
+		strscpy(this_rk->rk_id, rk_id, rk_id_len + 1);
 
 		/* link into chain */
 		this_rk->next = partitions;
@@ -192,6 +192,8 @@ static int rkpart_setup_real(char *s)
 
 		/* EOS - we're done */
 		if (*s == 0)
+			break;
+		if (*s == ' ' || *s == '\t')
 			break;
 		s++;
 	}
