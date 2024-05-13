@@ -1,0 +1,18 @@
+// SPDX-License-Identifier: (GPL-2.0+ OR MIT)
+/*
+ * Copyright (c) 2022 FriendlyElec Computer Tech. Co., Ltd.
+ * (http://www.friendlyelec.com)
+ */
+
+/dts-v1/;
+#include "rk3588-nanopi6-rev09.dts"
+
+/ {
+    model = "FriendlyElec CM3588 Plus";
+    compatible = "friendlyelec,cm3588", "rockchip,rk3588";
+};
+
+&mach {
+	hwrev = <6>;
+	model = "CM3588 Plus";
+};
