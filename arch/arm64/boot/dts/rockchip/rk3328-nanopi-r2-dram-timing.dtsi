@@ -1,0 +1,41 @@
+// SPDX-License-Identifier: (GPL-2.0+ OR MIT)
+/*
+ * Copyright (c) 2024 FriendlyElec Computer Tech. Co., Ltd.
+ * (http://www.friendlyelec.com)
+ *
+ * Based on rk3328-box-plus-dram-timing.dtsi
+ */
+
+&ddr_timing {
+	/* CA de-skew, one step is 47.8ps, range 0-15 */
+	ddr3a1_ddr4a9_de-skew = <0>;
+	ddr3a0_ddr4a10_de-skew = <0>;
+	ddr3a3_ddr4a6_de-skew = <1>;
+	ddr3a2_ddr4a4_de-skew = <1>;
+	ddr3a5_ddr4a8_de-skew = <0>;
+	ddr3a4_ddr4a5_de-skew = <2>;
+	ddr3a7_ddr4a11_de-skew = <0>;
+	ddr3a6_ddr4a7_de-skew = <2>;
+	ddr3a9_ddr4a0_de-skew = <1>;
+	ddr3a8_ddr4a13_de-skew = <0>;
+	ddr3a11_ddr4a3_de-skew = <2>;
+	ddr3a10_ddr4cs0_de-skew = <0>;
+	ddr3a13_ddr4a2_de-skew = <1>;
+	ddr3a12_ddr4ba1_de-skew = <0>;
+	ddr3a15_ddr4odt0_de-skew = <0>;
+	ddr3a14_ddr4a1_de-skew = <1>;
+	ddr3ba1_ddr4a15_de-skew = <0>;
+	ddr3ba0_ddr4bg0_de-skew = <0>;
+	ddr3ras_ddr4cke_de-skew = <0>;
+	ddr3ba2_ddr4ba0_de-skew = <1>;
+	ddr3we_ddr4bg1_de-skew = <1>;
+	ddr3cas_ddr4a12_de-skew = <0>;
+	ddr3ckn_ddr4ckn_de-skew = <5>;
+	ddr3ckp_ddr4ckp_de-skew = <5>;
+	ddr3cke_ddr4a16_de-skew = <1>;
+	ddr3odt0_ddr4a14_de-skew = <0>;
+	ddr3cs0_ddr4act_de-skew = <1>;
+	ddr3reset_ddr4reset_de-skew = <0>;
+	ddr3cs1_ddr4cs1_de-skew = <0>;
+	ddr3odt1_ddr4odt1_de-skew = <0>;
+};
