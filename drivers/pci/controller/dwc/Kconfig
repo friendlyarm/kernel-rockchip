@@ -150,6 +150,13 @@ config PCIE_HISI_STB
 	help
 	  Say Y here if you want PCIe controller support on HiSilicon STB SoCs
 
+config PCIE_RK_THREADED_INIT
+	bool "Threaded initialize Rockchip DW based PCIe controller"
+	depends on PCIE_ROCKCHIP_DW_HOST
+	default y
+	help
+	  Enables threaded initialize Rockchip DW based PCIe controller
+
 config PCIE_INTEL_GW
 	bool "Intel Gateway PCIe controller "
 	depends on OF && (X86 || COMPILE_TEST)

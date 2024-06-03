@@ -183,6 +183,9 @@ static int rockchip_pcie_start_link(struct dw_pcie *pci)
 	msleep(100);
 	gpiod_set_value_cansleep(rockchip->rst_gpio, 1);
 
+	/* Extra delay before pci_host_probe() */
+	msleep(10);
+
 	return 0;
 }
 
@@ -284,11 +287,13 @@ static const struct dw_pcie_ops dw_pcie_ops = {
 	.start_link = rockchip_pcie_start_link,
 };
 
-static int rockchip_pcie_probe(struct platform_device *pdev)
+static int rockchip_pcie_really_probe(void *p)
 {
+	struct platform_device *pdev = p;
 	struct device *dev = &pdev->dev;
 	struct rockchip_pcie *rockchip;
 	struct dw_pcie_rp *pp;
+	u32 val = 0;
 	int ret;
 
 	rockchip = devm_kzalloc(dev, sizeof(*rockchip), GFP_KERNEL);
@@ -326,6 +331,12 @@ static int rockchip_pcie_probe(struct platform_device *pdev)
 		}
 	}
 
+	if (IS_ENABLED(CONFIG_PCIE_RK_THREADED_INIT)) {
+		/* To ensure the ordering of pci device */
+		if (!device_property_read_u32(dev, "rockchip,init-delay-ms", &val))
+			msleep(val);
+	}
+
 	ret = rockchip_pcie_phy_init(rockchip);
 	if (ret)
 		goto disable_regulator;
@@ -350,6 +361,23 @@ disable_regulator:
 		regulator_disable(rockchip->vpcie3v3);
 
 	return ret;
+}
+
+static int rockchip_pcie_probe(struct platform_device *pdev)
+{
+	if (IS_ENABLED(CONFIG_PCIE_RK_THREADED_INIT)) {
+		struct task_struct *tsk;
+
+		tsk = kthread_run(rockchip_pcie_really_probe, pdev, "rk-pcie");
+		if (IS_ERR(tsk)) {
+			dev_err(&pdev->dev, "failed to start rk-pcie thread\n");
+			return PTR_ERR(tsk);
+		}
+
+		return 0;
+	}
+
+	return rockchip_pcie_really_probe(pdev);
 }
 
 static const struct of_device_id rockchip_pcie_of_match[] = {
