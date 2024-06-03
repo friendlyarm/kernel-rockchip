@@ -72,6 +72,11 @@ static int rockchip_cpuinfo_probe(struct platform_device *pdev)
 	efuse_buf = nvmem_cell_read(cell, &len);
 	nvmem_cell_put(cell);
 
+	if (IS_ERR(efuse_buf)) {
+		dev_err(dev, "failed to read id cell: %ld\n", PTR_ERR(efuse_buf));
+		return PTR_ERR(efuse_buf);
+	}
+
 	if (len != 16) {
 		kfree(efuse_buf);
 		dev_err(dev, "invalid id len: %zu\n", len);
