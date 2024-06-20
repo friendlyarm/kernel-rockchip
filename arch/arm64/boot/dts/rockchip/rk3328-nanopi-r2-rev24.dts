@@ -6,6 +6,7 @@
 
 /dts-v1/;
 #include "rk3328-nanopi-r2-common.dtsi"
+#include "rk3328-nanopi-r2-dram-timing.dtsi"
 
 / {
 	model = "FriendlyElec NanoPi R2S Plus";
