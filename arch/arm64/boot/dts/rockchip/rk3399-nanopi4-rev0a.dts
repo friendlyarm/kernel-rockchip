@@ -87,6 +87,25 @@
 	};
 };
 
+&leds {
+	lan_led: led2 {
+		gpios = <&gpio1 RK_PA1 GPIO_ACTIVE_HIGH>;
+		label = "lan_led";
+	};
+
+	wan_len: led3 {
+		gpios = <&gpio1 RK_PA0 GPIO_ACTIVE_HIGH>;
+		label = "wan_led";
+	};
+};
+
+&leds_gpio {
+	rockchip,pins =
+		<0 RK_PB5 RK_FUNC_GPIO &pcfg_pull_none>,
+		<1 RK_PA0 RK_FUNC_GPIO &pcfg_pull_none>,
+		<1 RK_PA1 RK_FUNC_GPIO &pcfg_pull_none>;
+};
+
 &emmc_phy {
 	status = "disabled";
 };
