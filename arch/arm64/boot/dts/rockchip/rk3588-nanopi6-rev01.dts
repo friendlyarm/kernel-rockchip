@@ -779,3 +779,7 @@ dsi1_pwm: &pwm11 {
 	pinctrl-0 = <&uart8m1_xfer>;
 	status = "disabled";
 };
+
+&can1 {
+	status = "okay";
+};
