@@ -295,6 +295,7 @@ struct mmc_card {
 #define MMC_QUIRK_BROKEN_HPI	(1<<13)		/* Disable broken HPI support */
 #define MMC_QUIRK_BROKEN_SD_DISCARD	(1<<14)	/* Disable broken SD discard support */
 #define MMC_QUIRK_BROKEN_SD_CACHE	(1<<15)	/* Disable broken SD cache support */
+#define MMC_QUIRK_BROKEN_ROCR_S18A	(1<<16)	/* Disable broken S18A (1) in the R4 response */
 
 	bool			reenable_cmdq;	/* Re-enable Command Queue */
 

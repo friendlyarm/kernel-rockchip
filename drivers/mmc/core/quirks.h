@@ -183,6 +183,9 @@ static const struct mmc_fixup __maybe_unused sdio_card_init_methods[] = {
 			      MMC_QUIRK_LENIENT_FN0 |
 			      MMC_QUIRK_BLKSZ_FOR_BYTE_MODE),
 
+	SDIO_FIXUP_COMPATIBLE("realtek,rtl8822cs", add_quirk,
+			      MMC_QUIRK_BROKEN_ROCR_S18A),
+
 	END_FIXUP
 };
 
