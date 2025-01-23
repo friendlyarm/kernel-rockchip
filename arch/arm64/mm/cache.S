@@ -161,6 +161,7 @@ SYM_FUNC_START(__pi_dcache_inval_poc)
 	ret
 SYM_FUNC_END(__pi_dcache_inval_poc)
 SYM_FUNC_ALIAS(dcache_inval_poc, __pi_dcache_inval_poc)
+EXPORT_SYMBOL(dcache_inval_poc)
 
 /*
  *	dcache_clean_poc(start, end)
@@ -176,6 +177,7 @@ SYM_FUNC_START(__pi_dcache_clean_poc)
 	ret
 SYM_FUNC_END(__pi_dcache_clean_poc)
 SYM_FUNC_ALIAS(dcache_clean_poc, __pi_dcache_clean_poc)
+EXPORT_SYMBOL(dcache_clean_poc)
 
 /*
  *	dcache_clean_pop(start, end)
