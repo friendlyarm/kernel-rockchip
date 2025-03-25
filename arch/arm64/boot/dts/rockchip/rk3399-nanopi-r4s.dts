@@ -143,6 +143,7 @@
 	ep-gpios = <&gpio2 RK_PB1 GPIO_ACTIVE_HIGH>;
 	max-link-speed = <1>;
 	num-lanes = <1>;
+	num-retry = <2>;
 	vpcie3v3-supply = <&vcc3v3_sys>;
 
 	pcie@0 {
