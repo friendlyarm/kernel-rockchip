@@ -293,7 +293,13 @@ static int rockchip_pcie_host_init_port(struct rockchip_pcie *rockchip)
 	struct device *dev = rockchip->dev;
 	int err, i = MAX_LANE_NUM;
 	u32 status;
+	int num_retry = 0;
 
+	device_property_read_u32(dev, "num-retry", &num_retry);
+	if (num_retry > 2)
+		num_retry = 2;
+
+retry:
 	gpiod_set_value_cansleep(rockchip->ep_gpio, 0);
 	usleep_range(5000, 6000);
 
@@ -333,6 +339,9 @@ static int rockchip_pcie_host_init_port(struct rockchip_pcie *rockchip)
 				 500 * USEC_PER_MSEC);
 	if (err) {
 		dev_err(dev, "PCIe link training gen1 timeout!\n");
+		if (num_retry-- > 0)
+			goto retry;
+
 		goto err_power_off_phy;
 	}
 
