@@ -211,12 +211,6 @@ int rockchip_pcie_init_port(struct rockchip_pcie *rockchip)
 		goto err_exit_phy;
 	}
 
-	err = reset_control_assert(rockchip->pipe_rst);
-	if (err) {
-		dev_err(dev, "assert pipe_rst err %d\n", err);
-		goto err_exit_phy;
-	}
-
 	udelay(10);
 
 	err = reset_control_deassert(rockchip->pm_rst);
@@ -272,6 +266,14 @@ int rockchip_pcie_init_port(struct rockchip_pcie *rockchip)
 		goto err_power_off_phy;
 	}
 
+	err = reset_control_assert(rockchip->pipe_rst);
+	if (err) {
+		dev_err(dev, "assert pipe_rst err %d\n", err);
+		goto err_power_off_phy;
+	}
+
+	usleep_range(200, 250);
+
 	/*
 	 * Please don't reorder the deassert sequence of the following
 	 * four reset pins.
@@ -302,11 +304,11 @@ int rockchip_pcie_init_port(struct rockchip_pcie *rockchip)
 
 	return 0;
 err_power_off_phy:
-	while (i--)
+	while (--i >= 0)
 		phy_power_off(rockchip->phys[i]);
 	i = MAX_LANE_NUM;
 err_exit_phy:
-	while (i--)
+	while (--i >= 0)
 		phy_exit(rockchip->phys[i]);
 	return err;
 }
