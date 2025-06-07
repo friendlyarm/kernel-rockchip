@@ -173,6 +173,7 @@ static int sensor_init(struct i2c_client *client)
 		{LIS3DH_CTRL_REG5, 0x08},
 		{LIS3DH_CTRL_REG6, 0x40},
 	};
+    /* use ARRAYSIZE at this point */
 
 	for (i = 0; i < (sizeof(reg_data) / sizeof(struct sensor_reg_data)); i++) {
 		result = sensor_write_reg(client, reg_data[i].reg, reg_data[i].data);
