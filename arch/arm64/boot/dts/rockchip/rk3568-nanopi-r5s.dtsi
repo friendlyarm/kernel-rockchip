@@ -35,6 +35,14 @@
 		};
 	};
 
+	fan: pwm-fan {
+		compatible = "pwm-fan";
+		cooling-levels = <0 18 102 170 255>;
+		#cooling-cells = <2>;
+		fan-supply = <&vcc5v0_sys>;
+		pwms = <&pwm0 0 50000 0>;
+	};
+
 	vdd_usbc: vdd-usbc-regulator {
 		compatible = "regulator-fixed";
 		regulator-name = "vdd_usbc";
@@ -478,6 +486,10 @@
 	status = "okay";
 };
 
+&pwm0 {
+	status = "okay";
+};
+
 &saradc {
 	vref-supply = <&vcca_1v8>;
 	status = "okay";
@@ -505,6 +517,34 @@
 	pinctrl-names = "default";
 	pinctrl-0 = <&sdmmc0_bus4 &sdmmc0_clk &sdmmc0_cmd &sdmmc0_det>;
 	status = "okay";
+};
+
+&cpu_thermal {
+	trips {
+		cpu_warm: cpu_warm {
+			temperature = <55000>;
+			hysteresis = <2000>;
+			type = "active";
+		};
+
+		cpu_hot: cpu_hot {
+			temperature = <65000>;
+			hysteresis = <2000>;
+			type = "active";
+		};
+	};
+
+	cooling-maps {
+		map2 {
+			trip = <&cpu_warm>;
+			cooling-device = <&fan THERMAL_NO_LIMIT 1>;
+		};
+
+		map3 {
+			trip = <&cpu_hot>;
+			cooling-device = <&fan 2 THERMAL_NO_LIMIT>;
+		};
+	};
 };
 
 &tsadc {
