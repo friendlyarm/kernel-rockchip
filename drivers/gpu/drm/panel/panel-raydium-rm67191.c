@@ -23,6 +23,8 @@
 #include <drm/drm_mipi_dsi.h>
 #include <drm/drm_panel.h>
 
+#include "../rockchip/rockchip_drm_drv.h"
+
 /* Panel specific color-format bits */
 #define COL_FMT_16BPP 0x55
 #define COL_FMT_18BPP 0x66
@@ -224,6 +226,8 @@ struct rad_panel {
 
 	const struct drm_display_mode *mode;
 	const struct rad_platform_data *pdata;
+
+	struct rockchip_drm_sub_dev sub_dev;
 };
 
 struct rad_platform_data {
@@ -626,27 +630,27 @@ static const struct drm_panel_funcs rad_panel_funcs = {
 	.get_modes = rad_panel_get_modes,
 };
 
-int panel_rad_loader_protect(struct drm_panel *panel)
+static int panel_rad_loader_protect(struct rockchip_drm_sub_dev *sub_dev, bool on)
 {
-	struct rad_panel *p;
+	struct rad_panel *p = container_of(sub_dev, struct rad_panel, sub_dev);
 	int err;
 
-	if (panel->funcs != &rad_panel_funcs) {
-		dev_dbg(panel->dev, "not rad-panel\n");
-		return -ENODEV;
+	if (on) {
+		err = regulator_bulk_enable(p->num_supplies, p->supplies);
+		if (err)
+			return err;
+
+		p->prepared = true;
+		p->enabled = true;
+	} else {
+		p->enabled = false;
+		p->prepared = false;
+
+		regulator_bulk_disable(p->num_supplies, p->supplies);
 	}
-
-	p = to_rad_panel(panel);
-	err = regulator_bulk_enable(p->num_supplies, p->supplies);
-	if (err)
-		return err;
-
-	p->prepared = true;
-	p->enabled = true;
 
 	return 0;
 }
-EXPORT_SYMBOL(panel_rad_loader_protect);
 
 static const char * const rad_supply_names[] = {
 	"v3p3",
@@ -803,6 +807,10 @@ static int rad_panel_probe(struct mipi_dsi_device *dsi)
 
 	drm_panel_add(&panel->panel);
 
+	panel->sub_dev.of_node = dev->of_node;
+	panel->sub_dev.loader_protect = panel_rad_loader_protect;
+	rockchip_drm_register_sub_dev(&panel->sub_dev);
+
 	ret = mipi_dsi_attach(dsi);
 	if (ret)
 		drm_panel_remove(&panel->panel);
@@ -815,6 +823,8 @@ static void rad_panel_remove(struct mipi_dsi_device *dsi)
 	struct rad_panel *rad = mipi_dsi_get_drvdata(dsi);
 	struct device *dev = &dsi->dev;
 	int ret;
+
+	rockchip_drm_unregister_sub_dev(&rad->sub_dev);
 
 	ret = mipi_dsi_detach(dsi);
 	if (ret)
