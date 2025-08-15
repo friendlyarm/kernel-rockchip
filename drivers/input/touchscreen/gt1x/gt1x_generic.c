@@ -854,6 +854,10 @@ s32 gt1x_read_version(struct gt1x_version_info *ver_info)
 				checksum += buf[i];
 			}
 
+			/* Ignore checksum for GT911 */
+			if (gt1x_chip_type == CHIP_TYPE_GT9X)
+				checksum = 0;
+
 			if (checksum == 0 &&	/* first 3 bytes must be number or char */
 			    IS_NUM_OR_CHAR(buf[0]) && IS_NUM_OR_CHAR(buf[1]) && IS_NUM_OR_CHAR(buf[2]) && buf[10] != 0xFF) {	/*sensor id == 0xFF, retry */
 				break;
@@ -902,6 +906,7 @@ s32 gt1x_get_chip_type(void)
 	u8 opr_buf[4] = { 0x00 };
 	u8 gt1x_data[] = { 0x02, 0x08, 0x90, 0x00 };
 	u8 gt9l_data[] = { 0x03, 0x10, 0x90, 0x00 };
+	u8 gt9x_data[] = { 0x00, 0x06, 0x90, 0x00 };
 	s32 ret = -1;
 
 	/* chip type already exist */
@@ -921,6 +926,12 @@ s32 gt1x_get_chip_type(void)
 		gt1x_chip_type = CHIP_TYPE_GT1X;
 	} else if (!memcmp(opr_buf, gt9l_data, sizeof(gt9l_data))) {
 		gt1x_chip_type = CHIP_TYPE_GT2X;
+	} else if (!memcmp(opr_buf, gt9x_data, sizeof(gt9x_data))) {
+		gt1x_chip_type = CHIP_TYPE_GT9X;
+		GTP_INFO("Chip Type: GT911");
+		return 0;
+	} else {
+		GTP_DEBUG("IC Hardware info: %02x %02x %02x %02x", opr_buf[0], opr_buf[1], opr_buf[2], opr_buf[3]);
 	}
 
 	if (gt1x_chip_type != CHIP_TYPE_NONE) {

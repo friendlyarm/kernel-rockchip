@@ -417,6 +417,7 @@ typedef enum {
 typedef enum {
 	CHIP_TYPE_GT1X = 0,
 	CHIP_TYPE_GT2X = 1,
+	CHIP_TYPE_GT9X = 2,
 	CHIP_TYPE_NONE = 0xFF
 } CHIP_TYPE_T;
 
