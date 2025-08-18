@@ -311,6 +311,7 @@ struct dw_hdmi_qp {
 	bool allm_enable;
 	bool support_hdmi;
 	bool skip_connector;
+	bool scdc_supported;
 	bool force_kernel_output;	/* force kernel hdmi output specific resolution */
 	int force_output;		/* force hdmi/dvi output mode */
 	int vp_id;
@@ -1911,6 +1912,8 @@ static void hdmi_config_drm_infoframe(struct dw_hdmi_qp *hdmi,
 static bool dw_hdmi_support_scdc(struct dw_hdmi_qp *hdmi,
 				 const struct drm_display_info *display)
 {
+	hdmi->scdc_supported = false;
+
 	/* Disable if no DDC bus */
 	if (!hdmi->ddc)
 		return false;
@@ -1931,6 +1934,7 @@ static bool dw_hdmi_support_scdc(struct dw_hdmi_qp *hdmi,
 	    display->max_tmds_clock <= 340000)
 		return false;
 
+	hdmi->scdc_supported = true;
 	return true;
 }
 
@@ -3809,7 +3813,10 @@ static void dw_hdmi_qp_bridge_atomic_disable(struct drm_bridge *bridge,
 
 	cancel_work_sync(&hdmi->flt_work);
 	flush_workqueue(hdmi->workqueue);
-	dw_hdmi_qp_flt_ltsl(hdmi);
+	if (hdmi->scdc_supported) {
+		dw_hdmi_qp_flt_ltsl(hdmi);
+		hdmi->scdc_supported = false;
+	}
 
 	if (hdmi->panel)
 		drm_panel_unprepare(hdmi->panel);
