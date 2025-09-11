@@ -527,6 +527,8 @@ static int of_serdev_register_devices(struct serdev_controller *ctrl)
 	for_each_available_child_of_node(ctrl->dev.of_node, node) {
 		if (!of_get_property(node, "compatible", NULL))
 			continue;
+		if (of_property_read_bool(node, "no-serdev"))
+			continue;
 
 		dev_dbg(&ctrl->dev, "adding child %pOF\n", node);
 
