@@ -24,7 +24,6 @@
 
 #include "es8389.h"
 
-
 /* codec private data */
 
 struct	es8389_private {
@@ -163,7 +162,6 @@ static const struct soc_enum es8389_dmic_mux_enum =
 static const struct snd_kcontrol_new es8389_dmic_mux_controls =
 	SOC_DAPM_ENUM("ADC MUX", es8389_dmic_mux_enum);
 
-
 static const struct snd_kcontrol_new es8389_left_mixer_controls[] = {
 	SOC_DAPM_SINGLE("DACR DACL Mixer", ES8389_DAC_MIX_REG44, 3, 1, 0),
 };
@@ -171,7 +169,6 @@ static const struct snd_kcontrol_new es8389_left_mixer_controls[] = {
 static const struct snd_kcontrol_new es8389_right_mixer_controls[] = {
 	SOC_DAPM_SINGLE("DACL DACR Mixer", ES8389_DAC_MIX_REG44, 2, 1, 0),
 };
-
 
 static const struct snd_kcontrol_new es8389_adc_mixer_controls[] = {
 	SOC_DAPM_SINGLE("DACL ADCL Mixer", ES8389_ADC_RESET_REG31, 7, 1, 0),
@@ -252,7 +249,6 @@ static const struct snd_soc_dapm_widget es8389_dapm_widgets[] = {
 	SND_SOC_DAPM_MUX("OUTR MUX", SND_SOC_NOPM, 0, 0, &es8389_outr_mux_controls),
 };
 
-
 static const struct snd_soc_dapm_route es8389_dapm_routes[] = {
 	{"PGAL", NULL, "INPUT1"},
 	{"PGAR", NULL, "INPUT2"},
@@ -280,7 +276,6 @@ static const struct snd_soc_dapm_route es8389_dapm_routes[] = {
 	{"IF DACL3", NULL, "DACL"},
 	{"IF DACR3", NULL, "DACR"},
 
-
 	{"IF DACL Mixer", NULL, "IF DACL2"},
 	{"IF DACL Mixer", "DACR DACL Mixer", "IF DACR1"},
 	{"IF DACR Mixer", NULL, "IF DACR2"},
@@ -293,7 +288,6 @@ static const struct snd_soc_dapm_route es8389_dapm_routes[] = {
 
 	{"HPOL", NULL, "OUTL MUX"},
 	{"HPOR", NULL, "OUTR MUX"},
-
 };
 
 struct _coeff_div {
@@ -315,7 +309,6 @@ struct _coeff_div {
 	u8 Reg0x43;
 	u8 Reg0x44;
 };
-
 
 /* codec hifi mclk clock divider coefficients */
 static const struct _coeff_div  coeff_div[] = {
@@ -400,7 +393,7 @@ static int es8389_set_dai_sysclk(struct snd_soc_dai *dai,
 	struct snd_soc_component *codec = dai->component;
 	struct es8389_private *es8389 = snd_soc_component_get_drvdata(codec);
 
-	printk("Enter into %s()\n", __func__);
+	dev_dbg(codec->dev, "Enter into %s()\n", __func__);
 	switch (freq) {
 	case 11289600:
 	case 22579200:
@@ -434,7 +427,7 @@ static int es8389_set_dai_fmt(struct snd_soc_dai *codec_dai, unsigned int fmt)
 
 	dev_dbg(codec->dev, "Enter into %s()\n", __func__);
 
-	switch(fmt & SND_SOC_DAIFMT_MASTER_MASK)
+	switch (fmt & SND_SOC_DAIFMT_MASTER_MASK)
 	{
 		case SND_SOC_DAIFMT_CBM_CFM:
 			regmap_update_bits(es8389->regmap, ES8389_MASTER_MODE_REG01,
@@ -446,7 +439,7 @@ static int es8389_set_dai_fmt(struct snd_soc_dai *codec_dai, unsigned int fmt)
 			return -EINVAL;
 	}
 
-	switch(fmt & SND_SOC_DAIFMT_FORMAT_MASK)
+	switch (fmt & SND_SOC_DAIFMT_FORMAT_MASK)
 	{
 		case SND_SOC_DAIFMT_I2S:
 			state |= ES8389_DAIFMT_I2S;
@@ -466,10 +459,11 @@ static int es8389_set_dai_fmt(struct snd_soc_dai *codec_dai, unsigned int fmt)
 		default:
 			break;
 	}
-		regmap_update_bits(es8389->regmap, ES8389_ADC_REG20, ES8389_DAIFMT_MASK, state);
-		regmap_update_bits(es8389->regmap, ES8389_DAC_REG40, ES8389_DAIFMT_MASK, state);
 
-		/* clock inversion */
+	regmap_update_bits(es8389->regmap, ES8389_ADC_REG20, ES8389_DAIFMT_MASK, state);
+	regmap_update_bits(es8389->regmap, ES8389_DAC_REG40, ES8389_DAIFMT_MASK, state);
+
+	/* clock inversion */
 	switch (fmt & SND_SOC_DAIFMT_INV_MASK) {
 		case SND_SOC_DAIFMT_NB_NF:
 			break;
@@ -481,7 +475,7 @@ static int es8389_set_dai_fmt(struct snd_soc_dai *codec_dai, unsigned int fmt)
 			break;
 		default:
 			break;
-		}
+	}
 
 	return 0;
 }
@@ -495,9 +489,9 @@ static int es8389_pcm_hw_params(struct snd_pcm_substream *substream,
 	int coeff;
 	u8 state = 0;
 
-	printk("Enter into %s()\n", __func__);
+	dev_dbg(codec->dev, "Enter into %s()\n", __func__);
 
-	switch (params_format(params)){
+	switch (params_format(params)) {
 		case SNDRV_PCM_FORMAT_S16_LE:
 			state |= ES8389_S16_LE;
 			break;
@@ -521,8 +515,7 @@ static int es8389_pcm_hw_params(struct snd_pcm_substream *substream,
 	regmap_update_bits(es8389->regmap, ES8389_DAC_REG40, ES8389_DATA_LEN_MASK, state);
 
 	coeff = get_coeff(es8389->sysclk, params_rate(params));
-	if(coeff >= 0)
-	{
+	if (coeff >= 0) {
 		regmap_write(es8389->regmap, ES8389_CLK_DIV1_REG04, coeff_div[coeff].Reg0x04);
 		regmap_write(es8389->regmap, ES8389_CLK_MUL_REG05, coeff_div[coeff].Reg0x05);
 		regmap_write(es8389->regmap, ES8389_CLK_MUX1_REG06, coeff_div[coeff].Reg0x06);
@@ -548,10 +541,10 @@ static int es8389_set_bias_level(struct snd_soc_component *codec,
 {
 	int ret;
 	struct es8389_private *es8389 = snd_soc_component_get_drvdata(codec);
-	printk("Enter into %s(), level = %d\n", __func__, level);
+	dev_dbg(codec->dev, "Enter into %s(), level = %d\n", __func__, level);
 	switch (level) {
 	case SND_SOC_BIAS_ON:
-		printk("%s on\n",__func__);
+		dev_dbg(codec->dev, "%s on\n",__func__);
 		ret = clk_prepare_enable(es8389->mclk);
 		if (ret)
 			return ret;
@@ -565,10 +558,10 @@ static int es8389_set_bias_level(struct snd_soc_component *codec,
 		regmap_write(es8389->regmap, ES8389_DAC_RESET_REG4D, 0X00);
 		break;
 	case SND_SOC_BIAS_PREPARE:
-		printk("%s prepare\n",__func__);
+		dev_dbg(codec->dev, "%s prepare\n",__func__);
 		break;
 	case SND_SOC_BIAS_STANDBY:
-		printk("%s standby\n",__func__);
+		dev_dbg(codec->dev, "%s standby\n",__func__);
 		regmap_write(es8389->regmap, ES8389_CSM_JUMP_REG10, 0xD4);
 		usleep_range(70000,72000); //20MS
 		regmap_write(es8389->regmap, ES8389_ANA_CTL1_REG61, 0x59);
@@ -577,22 +570,20 @@ static int es8389_set_bias_level(struct snd_soc_component *codec,
 		regmap_write(es8389->regmap, ES8389_RESET_REG00, 0x7E);
 		break;
 	case SND_SOC_BIAS_OFF:
-		printk("%s off\n",__func__);
+		dev_dbg(codec->dev, "%s off\n",__func__);
 		clk_disable_unprepare(es8389->mclk);
 		break;
 	}
 	return 0;
 }
 
-
-
 static int es8389_mute(struct snd_soc_dai *dai, int mute, int direction)
 {
 	struct snd_soc_component *codec = dai->component;
 	struct es8389_private *es8389 = snd_soc_component_get_drvdata(codec);
-	printk("Enter into %s(), mute = %d\n", __func__, mute);
 
-	if(mute) {
+	dev_dbg(codec->dev, "Enter into %s(), mute = %d\n", __func__, mute);
+	if (mute) {
 		if (direction == SNDRV_PCM_STREAM_PLAYBACK) {
 			regmap_update_bits(es8389->regmap, ES8389_DAC_REG40,
 						0x03, 0x03);
@@ -647,18 +638,18 @@ static struct snd_soc_dai_driver es8389_dai = {
 	.symmetric_rate = 1
 };
 
-
 static void es8389_state_delay_work(struct work_struct *work)
 {
 	struct es8389_private *es8389 =
 		container_of(work, struct es8389_private, state_work.work);
+	struct snd_soc_component *codec = es8389->component;
 	unsigned int state;
 
 	mutex_lock(&es8389->lock);
 	regmap_read(es8389->regmap, ES8389_CSM_STATE1_REGF1, &state);
 	state &= 0x1F;
-	if (state == ES8389_STATE_STANDBY){
-		printk("Enter into %s()\n", __func__);
+	if (state == ES8389_STATE_STANDBY) {
+		dev_dbg(codec->dev, "Enter into %s()\n", __func__);
 		regmap_write(es8389->regmap, ES8389_HPSW_REG69, 0x23);
 		regmap_write(es8389->regmap, ES8389_ANA_CTL1_REG61, 0xF9);
 		regmap_write(es8389->regmap, ES8389_ADC_EN_REG64, 0x8F);
@@ -674,7 +665,7 @@ static void es8389_state_delay_work(struct work_struct *work)
 static int es8389_suspend(struct snd_soc_component *codec)
 {
 	//struct es8389_private *es8389 = snd_soc_component_get_drvdata(codec);
-	printk("Enter into %s()\n", __func__);
+	dev_dbg(codec->dev, "Enter into %s()\n", __func__);
 
 	es8389_set_bias_level(codec, SND_SOC_BIAS_STANDBY);
 
@@ -684,7 +675,7 @@ static int es8389_suspend(struct snd_soc_component *codec)
 static int es8389_resume(struct snd_soc_component *codec)
 {
 	//struct es8389_private *es8389 = snd_soc_component_get_drvdata(codec);
-	printk("Enter into %s()\n", __func__);
+	dev_dbg(codec->dev, "Enter into %s()\n", __func__);
 
 	es8389_set_bias_level(codec, SND_SOC_BIAS_ON);
 
@@ -695,10 +686,12 @@ static int es8389_probe(struct snd_soc_component *codec)
 {
 	int ret = 0;
 	struct es8389_private *es8389 = snd_soc_component_get_drvdata(codec);
-	printk("Enter into %s()\n", __func__);
+
+	dev_dbg(codec->dev, "Enter into %s()\n", __func__);
 
 	es8389_codec = codec;
-	#if 1
+	es8389->component = codec;
+#if 1
 	es8389->mclk = devm_clk_get(codec->dev, "mclk");
 	if (IS_ERR(es8389->mclk)) {
 		dev_err(codec->dev, "%s,unable to get mclk\n", __func__);
@@ -776,7 +769,7 @@ static void es8389_remove(struct snd_soc_component *codec)
 {
 	struct es8389_private *es8389 = snd_soc_component_get_drvdata(codec);
 
-	printk("Enter into %s()\n", __func__);
+	dev_dbg(codec->dev, "Enter into %s()\n", __func__);
 	regmap_write(es8389->regmap, ES8389_MASTER_MODE_REG01, 0x28);
 	regmap_write(es8389->regmap, ES8389_HPSW_REG69, 0x00);
 	regmap_write(es8389->regmap, ES8389_VMID_REG60, 0x00);
@@ -846,7 +839,8 @@ static void es8389_i2c_shutdown(struct i2c_client *i2c)
 	regmap_write(es8389->regmap, ES8389_ISO_CTL_REGF3, 0xC1);
 	regmap_write(es8389->regmap, ES8389_PULL_DOWN_REGF2, 0x00);
 }
-static u32 cur_reg=0;
+
+static u32 cur_reg = 0;
 
 static ssize_t es8389_show(struct device *dev,
 			struct device_attribute *attr, char *_buf)
@@ -908,23 +902,25 @@ static struct attribute_group es8389_debug_attr_group = {
 
 static int es8389_read(struct i2c_client *client, u8 reg, u8 *value, int count)
 {
-        int ret;
-        u8 read_cmd[3] = {0};
-        u8 cmd_len = 0;
+	int ret;
+	u8 read_cmd[3] = {0};
+	u8 cmd_len = 0;
 
-        read_cmd[0] = reg;
-        cmd_len = 1;
-        ret = i2c_master_send(client, read_cmd, cmd_len);
-        if (ret != cmd_len) {
-                pr_err("es8389_read error1 ret = %d.\n", ret);
-                return -1;
-        }
-        ret = i2c_master_recv(client, value, count);
-        if (ret != 1) {
-                pr_err("es8389_read error2, ret = %d.\n", ret);
-                return -1;
-        }
-        return 0;
+	read_cmd[0] = reg;
+	cmd_len = 1;
+	ret = i2c_master_send(client, read_cmd, cmd_len);
+	if (ret != cmd_len) {
+		pr_err("es8389_read error1 ret = %d.\n", ret);
+		return -1;
+	}
+
+	ret = i2c_master_recv(client, value, count);
+	if (ret != 1) {
+		pr_err("es8389_read error2, ret = %d.\n", ret);
+		return -1;
+	}
+
+	return 0;
 }
 
 static int es8389_i2c_probe(struct i2c_client *i2c_client,
@@ -935,7 +931,7 @@ static int es8389_i2c_probe(struct i2c_client *i2c_client,
 	//unsigned int val;
 	u8 value[2];
 
-	printk("Enter into %s\n", __func__);
+	dev_dbg(&i2c_client->dev, "Enter into %s\n", __func__);
 	es8389 = devm_kzalloc(&i2c_client->dev,
 			sizeof(*es8389), GFP_KERNEL);
 	if (es8389 == NULL)
@@ -967,7 +963,7 @@ static int es8389_i2c_probe(struct i2c_client *i2c_client,
 	}
 	es8389_data = es8389;
 
-	ret =  devm_snd_soc_register_component(&i2c_client->dev,
+	ret = devm_snd_soc_register_component(&i2c_client->dev,
 			&soc_codec_dev_es8389,
 			&es8389_dai,
 			1);
@@ -975,14 +971,13 @@ static int es8389_i2c_probe(struct i2c_client *i2c_client,
 		return ret;
 	}
 
-	printk("Enter into %s-----4\n", __func__);
 	ret = sysfs_create_group(&i2c_client->dev.kobj,
 				&es8389_debug_attr_group);
 	if (ret) {
-		pr_err("failed to create attr group\n");
+		dev_err(&i2c_client->dev, "failed to create attr group\n");
 	}
 
-	printk("Exit %s\n", __func__);
+	dev_dbg(&i2c_client->dev, "Exit %s\n", __func__);
 	return ret;
 }
 
@@ -1014,5 +1009,4 @@ module_i2c_driver(es8389_i2c_driver);
 MODULE_DESCRIPTION("ASoC es8389 driver");
 MODULE_AUTHOR("David Yang <yangxiaohua@everest-semi.com>");
 MODULE_LICENSE("GPL");
-
 
