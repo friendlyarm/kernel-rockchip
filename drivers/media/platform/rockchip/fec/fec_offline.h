@@ -63,13 +63,14 @@ struct rkfec_frame_info {
 struct rkfec_debug_info {
 	u32 interval;
 	u32 frameloss;
+	u32 frame_timeout_cnt;
 };
 
 struct rkfec_offline_dev {
 	struct rkfec_hw_dev *hw;
 	struct v4l2_device v4l2_dev;
 	struct video_device vfd;
-	struct mutex apilock;
+	struct mutex ioctl_lock;
 	struct completion cmpl;
 	struct completion pm_cmpl;
 	struct list_head list;

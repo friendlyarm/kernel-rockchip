@@ -433,8 +433,8 @@
 			15 00 02 d2 32
 			15 00 02 d3 00
 			39 00 04 ff 98 81 00
-			05 00 01 11
-			05 01 01 29
+			05 96 01 11
+			05 14 01 29
 		];
 
 		disp_timings0: display-timings {
@@ -631,6 +631,10 @@
 	pmic {
 		pmic_int: pmic-int {
 			rockchip,pins = <0 RK_PA2 RK_FUNC_GPIO &pcfg_pull_up>;
+		};
+
+		soc_pwrctrl_reset: soc-pwrctrl-reset {
+			rockchip,pins = <0 RK_PC1 RK_FUNC_GPIO &pcfg_output_high>;
 		};
 	};
 

@@ -12,8 +12,6 @@
 
 #define RKMODULE_API_VERSION		KERNEL_VERSION(0, 1, 0x2)
 
-/* using for rk3588 dual isp unite */
-#define RKMOUDLE_UNITE_EXTEND_PIXEL	128
 /* using for rv1109 and rv1126 */
 #define RKMODULE_EXTEND_LINE		24
 
@@ -203,6 +201,72 @@
 
 #define RKMODULE_GET_EXP_INFO       \
 	_IOR('V', BASE_VIDIOC_PRIVATE + 46, struct rkmodule_exp_info)
+
+#define RKMODULE_SET_WB_GAIN  \
+	_IOW('V', BASE_VIDIOC_PRIVATE + 47, struct rkmodule_wb_gain_group)
+
+#define RKMODULE_SET_BLC  \
+	_IOW('V', BASE_VIDIOC_PRIVATE + 48, struct rkmodule_blc_group)
+
+#define RKMODULE_GET_SPD_RATIO	\
+	_IOR('V', BASE_VIDIOC_PRIVATE + 49, struct rkmodule_dcg_ratio)
+
+#define RKMODULE_GET_EXP_MODE       \
+	_IOR('V', BASE_VIDIOC_PRIVATE + 50, __u32)
+
+#define RKMODULE_SET_EXP_MODE       \
+	_IOW('V', BASE_VIDIOC_PRIVATE + 51, __u32)
+
+#define RKMODULE_GET_BAYER_MODE       \
+	_IOR('V', BASE_VIDIOC_PRIVATE + 52, __u32)
+
+#define RKMODULE_GET_WB_GAIN_INFO  \
+	_IOR('V', BASE_VIDIOC_PRIVATE + 53, struct rkmodule_wb_gain_info)
+
+#define RKMODULE_GET_BLC_INFO  \
+	_IOR('V', BASE_VIDIOC_PRIVATE + 54, struct rkmodule_blc_info)
+
+#define RKMODULE_SET_CMPS_MODE       \
+	_IOW('V', BASE_VIDIOC_PRIVATE + 55, __u32)
+
+#define RKMODULE_GET_ERROR_INFO       \
+	_IOR('V', BASE_VIDIOC_PRIVATE + 56, struct rkmodule_error_info)
+
+#define RKMODULE_SET_EXPAND_SINGLE_MODE       \
+	_IOW('V', BASE_VIDIOC_PRIVATE + 57, __u32)
+
+#define RKMODULE_SET_LENC  \
+	_IOW('V', BASE_VIDIOC_PRIVATE + 58, struct rkmodule_lenc_gain)
+
+#define RKMODULE_GET_LENC_INFO  \
+	_IOR('V', BASE_VIDIOC_PRIVATE + 59, struct rkmodule_lenc_info)
+
+#define RKMODULE_SET_REG_SETTING  \
+	_IOW('V', BASE_VIDIOC_PRIVATE + 60, struct rkmodule_reg_setting)
+
+#define RKMODULE_SET_BAYER_MODE       \
+	_IOW('V', BASE_VIDIOC_PRIVATE + 61, struct rkmodule_bayer_param)
+
+#define RKMODULE_GET_HDR_COMPR_SINGLE_FRAME_INFO  \
+	_IOR('V', BASE_VIDIOC_PRIVATE + 62, struct rkmodule_hdr_compr_single_frame_info)
+
+#define RKMODULE_SET_CHANNEL_POWER	\
+	_IOW('V', BASE_VIDIOC_PRIVATE + 63, struct rkmodule_channel_power)
+
+#define RKMODULE_SET_CHANNEL_STREAM	\
+	_IOW('x', 0, struct rkmodule_channel_stream)
+
+#define RKMODULE_SET_DES_LINK	\
+	_IOW('x', 1, __u32)
+
+#define RKMODULE_GET_MATCH_ID	\
+	_IOR('x', 2, __u32)
+
+#define RKMODULE_REG_LIST_MAX (16)
+struct rkmodule_reg_struct {
+	__u32 reg_addr;
+	__u32 reg_val;
+};
 
 struct rkmodule_i2cdev_info {
 	__u8 slave_addr;
@@ -500,6 +564,17 @@ struct rkmodule_hdr_esp {
 			__u32 obpix;
 		} idcd;
 	} val;
+};
+
+enum exp_mode_e {
+	EXP_NORMAL = 0,
+	EXP_HDR2_STA,
+	EXP_HDR2_DCG,
+	EXP_HDR3_DCG_VS,
+	EXP_HDR3_DCG_SPD,
+	EXP_HDR3_STA,
+	EXP_HDR3_DCG_LOFIC,
+	EXP_HDR3_LCG_LOFIC_VS,
 };
 
 struct rkmodule_hdr_cfg {
@@ -894,5 +969,143 @@ struct rkmodule_exp_info {
 	struct rkmodule_gain_mode gain_mode;
 	__u32 reserved[6];
 } __attribute__ ((packed));
+
+#define RKMODULE_MAX_WB_GAIN_GROUP (4)
+
+enum rkmodule_wb_type {
+	RKMODULE_HCG_WB_GAIN,
+	RKMODULE_LCG_WB_GAIN,
+	RKMODULE_SPD_WB_GAIN,
+	RKMODULE_VS_WB_GAIN,
+};
+
+struct rkmodule_wb_gain {
+	__u32 b_gain;
+	__u32 gb_gain;
+	__u32 gr_gain;
+	__u32 r_gain;
+};
+
+struct rkmodule_wb_gain_group {
+	__u32 group_num;
+	enum rkmodule_wb_type wb_gain_type[RKMODULE_MAX_WB_GAIN_GROUP];
+	struct rkmodule_wb_gain wb_gain[RKMODULE_MAX_WB_GAIN_GROUP];
+};
+
+#define RKMODULE_MAX_BLC_GROUP (4)
+
+enum rkmodule_blc_type {
+	RKMODULE_HCG_BLC,
+	RKMODULE_LCG_BLC,
+	RKMODULE_SPD_BLC,
+	RKMODULE_VS_BLC,
+};
+
+struct rkmodule_blc_group {
+	__u32 enable;
+	__u32 group_num;
+	enum rkmodule_blc_type blc_type[RKMODULE_MAX_BLC_GROUP];
+	__u32 blc[RKMODULE_MAX_BLC_GROUP];
+	__u32 bkdg_sw_en;
+	__u32 dgbk2bkdg_thred;
+	__u32 bkdg2dgbk_thred;
+	__u32 reg_num;
+	struct rkmodule_reg_struct reg_list[RKMODULE_REG_LIST_MAX];
+};
+
+enum rkmodule_bayer_mode {
+	RKMODULE_NORMAL_BAYER,
+	RKMODULE_QUARD_BAYER,
+};
+
+struct rkmodule_wb_gain_info {
+	__u32 coarse_bit;
+	__u32 fine_bit;
+	__u32 reserved[8];
+};
+
+struct rkmodule_blc_info {
+	__u32 bit_width;
+	__u32 reserved[8];
+};
+
+enum rkmodule_cmps_mode {
+	CMPS_LOW_BIT_WIDTH_MODE,
+	CMPS_HIGH_BIT_WIDTH_MODE,
+};
+
+struct rkmodule_error_info {
+	__u32 err_code;
+	__u8 detail[256];
+};
+
+enum rkmodule_expand_single_mode {
+	EXPAND_SINGLE_LCG,
+	EXPAND_SINGLE_HCG,
+	EXPAND_SINGLE_VS,
+	EXPAND_SINGLE_SPD,
+	EXPAND_SINGLE_LOFIC,
+};
+
+#define RKMODULE_MAX_LENC_GROUP (4)
+
+struct rkmodule_lenc_gain {
+	__u32 g[RKMODULE_LSCDATA_LEN];
+	__u32 b[RKMODULE_LSCDATA_LEN];
+	__u32 r[RKMODULE_LSCDATA_LEN];
+};
+
+struct rkmodule_lenc_data {
+	__u16 rgain;
+	__u16 bgain;
+	struct rkmodule_lenc_gain lenc_gain;
+};
+
+struct rkmodule_lenc_inf {
+	__u32 flag;
+	__u32 group_num;
+	__u32 lenc_gain_len;
+	struct rkmodule_lenc_data lenc_data[RKMODULE_MAX_LENC_GROUP];
+};
+
+struct rkmodule_lenc_info {
+	__u32 bit_width;
+	__u32 grid_num;
+	__u32 reserved[8];
+};
+
+enum rkmodule_binning_mode {
+	BAYER_BINNING_2X2,
+	BAYER_SKIP_2X2,
+	QBC_BINNING_2X2,
+};
+
+struct rkmodule_reg_setting {
+	__u32 setting_id;
+	__u32 binning_mode;
+	__u32 reg_num;
+	struct rkmodule_reg_struct reg_list[RKMODULE_REG_LIST_MAX];
+};
+
+struct rkmodule_bayer_param {
+	__u32 bayer_mode;
+	__u32 reg_num;
+	struct rkmodule_reg_struct reg_list[RKMODULE_REG_LIST_MAX];
+};
+
+struct rkmodule_hdr_compr_single_frame_info {
+	__u32 single_bitwidth;
+	__u32 reserved[8];
+};
+
+struct rkmodule_channel_power {
+	__u32 channel;
+	__u32 enable;
+};
+
+struct rkmodule_channel_stream {
+	__u32 channel;
+	__u32 enable;
+};
 
 #endif /* _UAPI_RKMODULE_CAMERA_H */

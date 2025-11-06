@@ -10,10 +10,12 @@
 #include <linux/rk-isp2-config.h>
 
 #define RKAIISP_PYRAMID_LAYER_NUM		4
+#define RKAIISP_AIYNR_LAYER_NUM			5
 #define RKAIISP_MAX_RUNCNT			8
 #define RKAIISP_MAX_ISPBUF			8
 #define RKAIISP_MODEL_UPDATE			0x01
 #define RKAIISP_OTHER_UPDATE			0x02
+#define RKAIISP_AIYNR_YBUF_NUM_MAX		8
 
 #define RKAIISP_CMD_SET_PARAM_INFO		\
 	_IOW('V', BASE_VIDIOC_PRIVATE + 0, struct rkaiisp_param_info)
@@ -25,7 +27,19 @@
 	_IO('V', BASE_VIDIOC_PRIVATE + 2)
 
 #define RKAIISP_CMD_QUEUE_BUF			\
-	_IOW('V', BASE_VIDIOC_PRIVATE + 3, struct rkisp_aiisp_st)
+	_IOW('V', BASE_VIDIOC_PRIVATE + 3, union rkaiisp_queue_buf)
+
+#define RKAIISP_CMD_INIT_AIRMS_BUFPOOL		\
+	_IOWR('V', BASE_VIDIOC_PRIVATE + 4, struct rkaiisp_rmsbuf_info)
+
+#define RKAIISP_CMD_GET_YNRBUF_INFO		\
+	_IOR('V', BASE_VIDIOC_PRIVATE + 5, struct rkaiisp_ynrbuf_info)
+
+#define RKAIISP_CMD_SET_MEMORY_MODE		\
+	_IOW('V', BASE_VIDIOC_PRIVATE + 6, enum rkaiisp_mem_mode)
+
+#define RKAIISP_CMD_CLEAR_IQPARAMS		\
+	_IO('V', BASE_VIDIOC_PRIVATE + 7)
 
 /**********************EVENT_PRIVATE***************************/
 #define RKAIISP_V4L2_EVENT_AIISP_DONE		(V4L2_EVENT_PRIVATE_START + 1)
@@ -44,13 +58,26 @@ enum rkaiisp_chn_src {
 	VPSL_SIG_CHN3,
 	VPSL_SIG_CHN4,
 	ISP_AIPRE_NARMAP,
-	AIISP_LAST_OUT
+	AIISP_LAST_OUT,
+	VICAP_BAYER_RAW,
+	ALLZERO_SIGMA,
+	ALLZERO_NARMAP,
+	ISP_FINAL_Y,
+	VICAP_BAYER_RAW_DOWN
+};
+
+enum rkaiisp_exealgo {
+	AIBNR,
+	AIRMS,
+	AIYNR
 };
 
 enum rkaiisp_model_mode {
 	SINGLE_MODE,
 	COMBO_MODE,
-	SINGLEX2_MODE
+	SINGLEX2_MODE,
+	REMOSAIC_MODE,
+	AIYNR_MODE
 };
 
 enum rkaiisp_exemode {
@@ -59,7 +86,24 @@ enum rkaiisp_exemode {
 	BOTHEVENT_IN_KERNEL
 };
 
+enum rkaiisp_mem_mode {
+	SINGLE_MEMODE,
+	COMBO_MEMODE,
+};
+
+struct rkaiisp_airms_st {
+	int sequence;
+	int inbuf_idx;
+	int outbuf_idx;
+} __attribute__ ((packed));
+
+union rkaiisp_queue_buf {
+	struct rkisp_aiisp_st aibnr_st;
+	struct rkaiisp_airms_st airms_st;
+} __attribute__ ((packed));
+
 struct rkaiisp_param_info {
+	enum rkaiisp_exealgo exealgo;
 	enum rkaiisp_exemode exemode;
 	__u32 para_size;
 	__u32 max_runcnt;
@@ -75,6 +119,26 @@ struct rkaiisp_ispbuf_info {
 	__u32 sig_height[5];
 	__u32 narmap_width;
 	__u32 narmap_height;
+} __attribute__ ((packed));
+
+struct rkaiisp_rmsbuf_info {
+	__u32 image_width;
+	__u32 image_height;
+	__u32 sigma_width;
+	__u32 sigma_height;
+	__u32 narmap_width;
+	__u32 narmap_height;
+	__u32 inbuf_num;
+	__u32 outbuf_num;
+	int inbuf_fd[6];
+	int outbuf_fd[6];
+} __attribute__ ((packed));
+
+struct rkaiisp_ynrbuf_info {
+	int width;
+	int height;
+	__u32 buf_cnt;
+	int dma_fd[RKAIISP_AIYNR_YBUF_NUM_MAX];
 } __attribute__ ((packed));
 
 struct rkaiisp_other_cfg {

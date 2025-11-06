@@ -100,8 +100,13 @@ static void rkvpss_rockit_cfg_stream_buffer(struct rkvpss_stream *stream,
 	if (input_cfg->vir_width) {
 		stream->out_fmt.plane_fmt[0].bytesperline = input_cfg->vir_width *
 							    DIV_ROUND_UP(fmt->bpp[0], 8);
-		y_offs = input_cfg->y_offset;
-		uv_offs = input_cfg->uv_offset;
+		if (fmt->fmt_type == FMT_FBC) {
+			y_offs = input_cfg->y_offset;	// FBC header is at buffer start
+			uv_offs = input_cfg->uv_offset + stream->fbc_head_size;	// payload
+		} else {
+			y_offs = input_cfg->y_offset;
+			uv_offs = input_cfg->uv_offset;
+		}
 
 		stream->out_fmt.plane_fmt[1].bytesperline = input_cfg->vir_width *
 							    DIV_ROUND_UP(fmt->bpp[0], 8);
@@ -109,7 +114,10 @@ static void rkvpss_rockit_cfg_stream_buffer(struct rkvpss_stream *stream,
 							 stream->out_fmt.height;
 	} else {
 		y_offs = 0;
-		if (stream->dev->stream_vdev.wrap_line && stream->id == RKVPSS_OUTPUT_CH0) {
+		if (fmt->fmt_type == FMT_FBC) {
+			y_offs = 0;  // FBC header is at buffer start
+			uv_offs = stream->fbc_head_size;  // Y payload after header
+		} else if (stream->dev->stream_vdev.wrap_line && stream->id == RKVPSS_OUTPUT_CH0) {
 			uv_offs = stream->out_fmt.plane_fmt[0].bytesperline *
 				  stream->dev->stream_vdev.wrap_line;
 			stream->dev->wrap_buf.dbuf = vpssrk_buf->dmabuf;
@@ -208,8 +216,13 @@ int rkvpss_rockit_buf_queue(struct rockit_rkvpss_cfg *input_cfg)
 		}
 
 		vpssrk_buf->vaddr = NULL;
-		if (dma_buf_vmap(input_cfg->buf, &map) == 0)
-			vpssrk_buf->vaddr = map.vaddr;
+		/* default vmap two to get image, rkvpss_buf_dbg > 0 to vmap all */
+		if (i < 2 || rkvpss_buf_dbg > 0) {
+			v4l2_dbg(3, rkvpss_debug, &vpss_dev->v4l2_dev,
+				 "stream:%d rockit vmap buf:%p\n", stream->id, input_cfg->buf);
+			if (dma_buf_vmap(input_cfg->buf, &map) == 0)
+				vpssrk_buf->vaddr = map.vaddr;
+		}
 
 		vpssrk_buf->buff_addr = sg_dma_address(sgt->sgl);
 		get_dma_buf(input_cfg->buf);
@@ -245,10 +258,6 @@ int rkvpss_rockit_buf_queue(struct rockit_rkvpss_cfg *input_cfg)
 
 	list_add_tail(&vpssrk_buf->vpss_buffer.queue, &stream->buf_queue);
 	spin_unlock_irqrestore(&stream->vbq_lock, lock_flags);
-
-	if (stream->is_pause)
-		stream->ops->update_mi(stream);
-
 	return 0;
 }
 
@@ -292,12 +301,21 @@ int rkvpss_rockit_buf_done(struct rkvpss_stream *stream, int cmd, struct rkvpss_
 			 curr_buf->vb.sequence,
 			 curr_buf->dma[0]);
 	} else {
-		//tosee
 		if (!(stream->dev->stream_vdev.wrap_line && stream->id == RKVPSS_OUTPUT_CH0))
 			return 0;
+		if (stream->skip_frame) {
+			stream->skip_frame--;
+			return 0;
+		}
 
 		rockit_vpss_cfg->frame.u64PTS = vpss_dev->vpss_sdev.frame_timestamp;
 		rockit_vpss_cfg->frame.u32TimeRef = vpss_dev->vpss_sdev.frame_seq;
+		rockit_vpss_cfg->frame.ispEncCnt =
+			RKVPSS2X_RO_VPSS2ENC_FRM_CNT(rkvpss_hw_read(vpss_dev->hw_dev, RKVPSS2X_VPSS2ENC_DEBUG));
+		v4l2_dbg(2, rkvpss_debug, &vpss_dev->v4l2_dev,
+			 "stream:%d seq:%d enc_frm_cnt:%d rockit buf done:0x%x\n",
+			 stream->id, curr_buf->vb.sequence,
+			 rockit_vpss_cfg->frame.ispEncCnt, curr_buf->dma[0]);
 	}
 
 	rockit_vpss_cfg->frame.u32Height = stream->out_fmt.height;
@@ -308,6 +326,29 @@ int rkvpss_rockit_buf_done(struct rkvpss_stream *stream, int cmd, struct rkvpss_
 	rockit_vpss_cfg->current_name = vpss_dev->name;
 	rockit_vpss_cfg->node = stream_cfg->node;
 	rockit_vpss_cfg->event = cmd;
+
+	if (stream->is_attach_info) {
+		struct rkisp_vpss_frame_info *src_info = &vpss_dev->frame_info;
+
+		rockit_vpss_cfg->frame.u64PTS = src_info->timestamp;
+		rockit_vpss_cfg->frame.hdr = src_info->hdr;
+		rockit_vpss_cfg->frame.rolling_shutter_skew = src_info->rolling_shutter_skew;
+
+		rockit_vpss_cfg->frame.sensor_exposure_time = src_info->sensor_exposure_time;
+		rockit_vpss_cfg->frame.sensor_analog_gain = src_info->sensor_analog_gain;
+		rockit_vpss_cfg->frame.sensor_digital_gain = src_info->sensor_digital_gain;
+		rockit_vpss_cfg->frame.isp_digital_gain = src_info->isp_digital_gain;
+
+		rockit_vpss_cfg->frame.sensor_exposure_time_m = src_info->sensor_exposure_time_m;
+		rockit_vpss_cfg->frame.sensor_analog_gain_m = src_info->sensor_analog_gain_m;
+		rockit_vpss_cfg->frame.sensor_digital_gain_m = src_info->sensor_digital_gain_m;
+		rockit_vpss_cfg->frame.isp_digital_gain_m = src_info->isp_digital_gain_m;
+
+		rockit_vpss_cfg->frame.sensor_exposure_time_l = src_info->sensor_exposure_time_l;
+		rockit_vpss_cfg->frame.sensor_analog_gain_l = src_info->sensor_analog_gain_l;
+		rockit_vpss_cfg->frame.sensor_digital_gain_l = src_info->sensor_digital_gain_l;
+		rockit_vpss_cfg->frame.isp_digital_gain_l = src_info->isp_digital_gain_l;
+	}
 
 	if (list_empty(&stream->buf_queue))
 		rockit_vpss_cfg->is_empty = true;
@@ -571,7 +612,8 @@ void rkvpss_rockit_frame_start(struct rkvpss_device *dev)
 		stream = &dev->stream_vdev.stream[i];
 		if (!stream->streaming)
 			continue;
-		rkvpss_rockit_buf_done(stream, ROCKIT_DVBM_START, stream->curr_buf);
+		if (stream->curr_buf && !stream->curr_buf->vb.vb2_buf.memory)
+			rkvpss_rockit_buf_done(stream, ROCKIT_DVBM_START, stream->curr_buf);
 	}
 }
 

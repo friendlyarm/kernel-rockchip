@@ -731,7 +731,6 @@ static void rockchip_drm_mode_fixup(struct drm_crtc_state *crtc_state,
 	struct drm_encoder *encoder = conn_state->best_encoder;
 	struct drm_crtc *crtc = crtc_state->crtc;
 	struct drm_bridge *bridge;
-	struct drm_bridge_state *bridge_state;
 	int ret;
 
 	ret = drm_atomic_set_mode_for_crtc(crtc_state, adj_mode);
@@ -739,21 +738,22 @@ static void rockchip_drm_mode_fixup(struct drm_crtc_state *crtc_state,
 		return;
 
 	bridge = drm_bridge_chain_get_first_bridge(encoder);
-	/*
-	 * Check whether the bridge supports atomic mode or not.
-	 * According to the include/drm/drm_bridge.h, the following functions
-	 * are mandatory in atomic mode:
-	 * &drm_bridge_funcs.atomic_reset()
-	 * &drm_bridge_funcs.atomic_duplicate_state()
-	 * &drm_bridge_funcs.atomic_destroy_state()
-	 *
-	 * For some bridge drivers that have not supported atomic mode yet:
-	 * drivers/gpu/drm/bridge/sii902x.c
-	 * drivers/gpu/drm/bridge/rk630-tve.c
-	 */
-	if (bridge && bridge->funcs->atomic_duplicate_state) {
-		bridge_state = drm_atomic_get_bridge_state(crtc_state->state, bridge);
-		if (IS_ERR(bridge_state))
+	if (bridge) {
+		/*
+		 * The drm_atomic_add_encoder_bridges() will check whether each
+		 * bridge in chain supports atomic mode or not. According to the
+		 * include/drm/drm_bridge.h, the following functions are mandatory
+		 * in atomic mode:
+		 * &drm_bridge_funcs.atomic_reset()
+		 * &drm_bridge_funcs.atomic_duplicate_state()
+		 * &drm_bridge_funcs.atomic_destroy_state()
+		 *
+		 * For some bridge drivers that have not supported atomic mode yet:
+		 * drivers/gpu/drm/bridge/sii902x.c
+		 * drivers/gpu/drm/bridge/rk630-tve.c
+		 */
+		ret = drm_atomic_add_encoder_bridges(crtc_state->state, encoder);
+		if (ret)
 			return;
 
 		drm_atomic_bridge_chain_check(bridge, crtc_state, conn_state);
@@ -814,7 +814,7 @@ static int setup_initial_state(struct drm_device *drm_dev,
 		conn_state->best_encoder = rockchip_drm_connector_get_single_encoder(connector);
 
 	if (set->sub_dev->loader_protect) {
-		ret = set->sub_dev->loader_protect(conn_state->best_encoder, true);
+		ret = set->sub_dev->loader_protect(set->sub_dev, true);
 		if (ret) {
 			dev_err(drm_dev->dev,
 				"connector[%s] loader protect failed\n",
@@ -990,7 +990,7 @@ error_crtc:
 		priv->crtc_funcs[pipe]->loader_protect(crtc, false, NULL);
 error_conn:
 	if (set->sub_dev->loader_protect)
-		set->sub_dev->loader_protect(conn_state->best_encoder, false);
+		set->sub_dev->loader_protect(set->sub_dev, false);
 
 	return ret;
 }
@@ -1002,12 +1002,24 @@ static int update_state(struct drm_device *drm_dev,
 {
 	struct drm_crtc *crtc = set->crtc;
 	struct drm_connector *connector = set->sub_dev->connector;
+	struct drm_encoder *encoder;
 	struct drm_display_mode *mode = set->mode;
 	struct drm_plane_state *primary_state;
 	struct drm_crtc_state *crtc_state;
 	struct drm_connector_state *conn_state;
+	const struct drm_connector_helper_funcs *connector_helper_funcs;
 	int ret;
 	struct rockchip_crtc_state *s;
+
+	connector_helper_funcs = connector->helper_private;
+	if (!connector_helper_funcs)
+		return -ENXIO;
+	if (connector_helper_funcs->best_encoder)
+		encoder = connector_helper_funcs->best_encoder(connector);
+	else
+		encoder = rockchip_drm_connector_get_single_encoder(connector);
+	if (!encoder)
+		return -ENXIO;
 
 	crtc_state = drm_atomic_get_crtc_state(state, crtc);
 	if (IS_ERR(crtc_state))
@@ -1015,6 +1027,10 @@ static int update_state(struct drm_device *drm_dev,
 	conn_state = drm_atomic_get_connector_state(state, connector);
 	if (IS_ERR(conn_state))
 		return PTR_ERR(conn_state);
+	ret = drm_atomic_add_encoder_bridges(state, encoder);
+	if (ret)
+		return ret;
+
 	s = to_rockchip_crtc_state(crtc_state);
 	s->left_margin = set->left_margin;
 	s->right_margin = set->right_margin;
@@ -1033,19 +1049,8 @@ static int update_state(struct drm_device *drm_dev,
 		crtc_state->active = true;
 	} else {
 		const struct drm_encoder_helper_funcs *encoder_helper_funcs;
-		const struct drm_connector_helper_funcs *connector_helper_funcs;
-		struct drm_encoder *encoder;
 		struct drm_bridge *bridge;
 
-		connector_helper_funcs = connector->helper_private;
-		if (!connector_helper_funcs)
-			return -ENXIO;
-		if (connector_helper_funcs->best_encoder)
-			encoder = connector_helper_funcs->best_encoder(connector);
-		else
-			encoder = rockchip_drm_connector_get_single_encoder(connector);
-		if (!encoder)
-			return -ENXIO;
 		encoder_helper_funcs = encoder->helper_private;
 		if (!encoder_helper_funcs->atomic_check)
 			return -ENXIO;
@@ -1323,16 +1328,39 @@ static const char *const loader_protect_clocks[] __initconst = {
 	"dclk_vp3",
 };
 
-static struct clk **loader_clocks __initdata;
+static struct clk **loader_clocks;
 static int __init rockchip_clocks_loader_protect(void)
 {
+	struct device_node *np, *route_np, *route_child_np;
 	int nclocks = ARRAY_SIZE(loader_protect_clocks);
 	struct clk *clk;
 	int i;
+	int ret = 0;
+
+	/* Check for available route nodes and enable protect only when node is available. */
+	np = of_find_compatible_node(NULL, NULL, "rockchip,display-subsystem");
+	if (!np || !of_device_is_available(np)) {
+		ret = -ENODEV;
+		goto err_np;
+	}
+
+	route_np = of_get_child_by_name(np, "route");
+	if (!route_np) {
+		ret = -ENODEV;
+		goto err_route_np;
+	}
+
+	route_child_np = of_get_next_available_child(route_np, NULL);
+	if (!route_child_np) {
+		ret = -ENODEV;
+		goto err_route_child_np;
+	}
 
 	loader_clocks = kcalloc(nclocks, sizeof(void *), GFP_KERNEL);
-	if (!loader_clocks)
-		return -ENOMEM;
+	if (!loader_clocks) {
+		ret = -ENOMEM;
+		goto err_route_child_np;
+	}
 
 	for (i = 0; i < nclocks; i++) {
 		clk = __clk_lookup(loader_protect_clocks[i]);
@@ -1343,11 +1371,18 @@ static int __init rockchip_clocks_loader_protect(void)
 		}
 	}
 
-	return 0;
+err_route_child_np:
+	of_node_put(route_child_np);
+err_route_np:
+	of_node_put(route_np);
+err_np:
+	of_node_put(np);
+
+	return ret;
 }
 arch_initcall_sync(rockchip_clocks_loader_protect);
 
-static int __init rockchip_clocks_loader_unprotect(void)
+int rockchip_clocks_loader_unprotect(void)
 {
 	int i;
 
@@ -1361,8 +1396,8 @@ static int __init rockchip_clocks_loader_unprotect(void)
 			clk_disable_unprepare(clk);
 	}
 	kfree(loader_clocks);
+	loader_clocks = NULL;
 
 	return 0;
 }
-late_initcall_sync(rockchip_clocks_loader_unprotect);
 #endif

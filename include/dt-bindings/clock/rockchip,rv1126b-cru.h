@@ -94,7 +94,7 @@
 #define CLK_GMAC_125M				84
 #define CLK_TIMER_ROOT				85
 #define TCLK_WDT_NS_SRC				86
-#define TCLK_WDT_S				87
+#define TCLK_WDT_S_SRC				87
 #define TCLK_WDT_HPMCU				88
 #define CLK_CAN0				89
 #define CLK_CAN1				90
@@ -369,8 +369,27 @@
 #define ACLK_VPSL				359
 #define CLK_CORE_VPSL				360
 #define CLK_MACPHY				361
+#define HCLK_RKRNG_NS				362
+#define HCLK_RKRNG_S_NS				363
+#define CLK_AISP_PLL_SRC			364
 
-#define CLK_NR_CLKS				(CLK_MACPHY + 1)
+/* secure clks */
+#define CLK_USER_OTPC_S				400
+#define CLK_SBPI_OTPC_S				401
+#define PCLK_OTPC_S				402
+#define PCLK_KEY_READER_S			403
+#define HCLK_KL_RKCE_S				404
+#define HCLK_RKCE_S				405
+#define PCLK_WDT_S				406
+#define TCLK_WDT_S				407
+#define CLK_STIMER0				408
+#define CLK_STIMER1				409
+#define PLK_STIMER				410
+#define HCLK_RKRNG_S				411
+#define CLK_PKA_RKCE_S				412
+#define ACLK_RKCE_S				413
+
+#define CLK_NR_CLKS				(ACLK_RKCE_S + 1)
 
 // ======================= TOPCRU module definition bank=0 ========================
 // TOPCRU_SOFTRST_CON15(Offset:0xA3C)

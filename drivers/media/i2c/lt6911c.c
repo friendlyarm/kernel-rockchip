@@ -20,6 +20,7 @@
 #include <linux/module.h>
 #include <linux/of_graph.h>
 #include <linux/rk-camera-module.h>
+#include <linux/rk_hdmirx_config.h>
 #include <linux/slab.h>
 #include <linux/timer.h>
 #include <linux/v4l2-dv-timings.h>
@@ -146,6 +147,17 @@ struct lt6911c_mode {
 	u32 hts_def;
 	u32 vts_def;
 	u32 exp_def;
+};
+
+static struct rkmodule_csi_dphy_param rk3588_dcphy_param = {
+	.vendor = PHY_VENDOR_SAMSUNG,
+	.lp_vol_ref = 3,
+	.lp_hys_sw = {3, 0, 3, 0},
+	.lp_escclk_pol_sel = {1, 1, 0, 0},
+	.skew_data_cal_clk = {0, 6, 0, 6},
+	.clk_hs_term_sel = 2,
+	.data_hs_term_sel = {2, 2, 2, 2},
+	.reserved = {0},
 };
 
 static const struct lt6911c_mode supported_modes[] = {
@@ -939,6 +951,7 @@ static void lt6911c_get_module_inf(struct lt6911c_state *lt6911c,
 static long lt6911c_ioctl(struct v4l2_subdev *sd, unsigned int cmd, void *arg)
 {
 	struct lt6911c_state *lt6911c = to_state(sd);
+	struct rkmodule_csi_dphy_param *dphy_param;
 	long ret = 0;
 
 	switch (cmd) {
@@ -947,6 +960,22 @@ static long lt6911c_ioctl(struct v4l2_subdev *sd, unsigned int cmd, void *arg)
 		break;
 	case RKMODULE_GET_HDMI_MODE:
 		*(int *)arg = RKMODULE_HDMIIN_MODE;
+		break;
+		case RKMODULE_SET_CSI_DPHY_PARAM:
+		dphy_param = (struct rkmodule_csi_dphy_param *)arg;
+		if (dphy_param->vendor == PHY_VENDOR_SAMSUNG)
+			rk3588_dcphy_param = *dphy_param;
+		dev_dbg(&lt6911c->i2c_client->dev,
+			"sensor set dphy param\n");
+		break;
+	case RKMODULE_GET_CSI_DPHY_PARAM:
+		dphy_param = (struct rkmodule_csi_dphy_param *)arg;
+		*dphy_param = rk3588_dcphy_param;
+		dev_dbg(&lt6911c->i2c_client->dev,
+			"sensor get dphy param\n");
+		break;
+	case RK_HDMIRX_CMD_GET_SIGNAL_STABLE_STATUS:
+		*(int *)arg = !lt6911c->nosignal;
 		break;
 	default:
 		ret = -ENOIOCTLCMD;
@@ -962,6 +991,7 @@ static long lt6911c_compat_ioctl32(struct v4l2_subdev *sd,
 {
 	void __user *up = compat_ptr(arg);
 	struct rkmodule_inf *inf;
+	struct rkmodule_csi_dphy_param *dphy_param;
 	long ret;
 	int *seq;
 
@@ -988,6 +1018,49 @@ static long lt6911c_compat_ioctl32(struct v4l2_subdev *sd,
 			return ret;
 		}
 
+		ret = lt6911c_ioctl(sd, cmd, seq);
+		if (!ret) {
+			ret = copy_to_user(up, seq, sizeof(*seq));
+			if (ret)
+				ret = -EFAULT;
+		}
+		kfree(seq);
+		break;
+	case RKMODULE_SET_CSI_DPHY_PARAM:
+		dphy_param = kzalloc(sizeof(*dphy_param), GFP_KERNEL);
+		if (!dphy_param) {
+			ret = -ENOMEM;
+			return ret;
+		}
+
+		ret = copy_from_user(dphy_param, up, sizeof(*dphy_param));
+		if (!ret)
+			ret = lt6911c_ioctl(sd, cmd, dphy_param);
+		else
+			ret = -EFAULT;
+		kfree(dphy_param);
+		break;
+	case RKMODULE_GET_CSI_DPHY_PARAM:
+		dphy_param = kzalloc(sizeof(*dphy_param), GFP_KERNEL);
+		if (!dphy_param) {
+			ret = -ENOMEM;
+			return ret;
+		}
+
+		ret = lt6911c_ioctl(sd, cmd, dphy_param);
+		if (!ret) {
+			ret = copy_to_user(up, dphy_param, sizeof(*dphy_param));
+			if (ret)
+				ret = -EFAULT;
+		}
+		kfree(dphy_param);
+		break;
+	case RK_HDMIRX_CMD_GET_SIGNAL_STABLE_STATUS:
+		seq = kzalloc(sizeof(*seq), GFP_KERNEL);
+		if (!seq) {
+			ret = -ENOMEM;
+			return ret;
+		}
 		ret = lt6911c_ioctl(sd, cmd, seq);
 		if (!ret) {
 			ret = copy_to_user(up, seq, sizeof(*seq));

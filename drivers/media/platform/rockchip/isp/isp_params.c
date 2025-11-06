@@ -223,6 +223,10 @@ static void rkisp_params_vb2_buf_queue(struct vb2_buffer *vb)
 	spin_unlock_irqrestore(&params_vdev->config_lock, flags);
 
 	if (dev->is_wait_aiq) {
+		if (rkisp_cond_poll_timeout(dev->is_wait_aiq_isp_end, 1000, 50 * USEC_PER_MSEC)) {
+			dev_err(dev->dev, "wait for isp idle timeout\n");
+			return;
+		}
 		dev_info(dev->dev, "sync params for rtt\n");
 		dev->is_wait_aiq = false;
 		dev->skip_frame = 0;
@@ -250,11 +254,16 @@ static void rkisp_params_vb2_buf_queue(struct vb2_buffer *vb)
 			vb2_buffer_done(&buf->vb.vb2_buf, VB2_BUF_STATE_DONE);
 		}
 		spin_unlock_irqrestore(&params_vdev->config_lock, flags);
+		if (rkisp_cond_poll_timeout(!dev->is_rtt_first, 1000, 50 * USEC_PER_MSEC)) {
+			dev_err(dev->dev, "wait for isp idle timeout\n");
+			return;
+		}
 		dev_info(dev->dev, "params seq:%d for rtt\n", params->frame_id);
 		dev->is_first_double = false;
 		if (dev->isp_ver >= ISP_V33) {
 			dev->skip_frame = 1;
 			dev->is_wait_aiq = true;
+			dev->is_wait_aiq_isp_end = false;
 		}
 		dev->sw_rd_cnt = 0;
 		if (dev->hw_dev->unite == ISP_UNITE_ONE) {
@@ -300,17 +309,28 @@ static void rkisp_params_vb2_stop_streaming(struct vb2_queue *vq)
 		vb2_buffer_done(&buf->vb.vb2_buf, VB2_BUF_STATE_ERROR);
 	}
 
-	if (dev->is_pre_on) {
+	if (dev->is_pre_on && (dev->isp_state & ISP_START)) {
 		params_vdev->first_cfg_params = true;
 		return;
 	}
-	rkisp_params_disable_isp(params_vdev);
 	/* clean module params */
 	params_vdev->ops->clear_first_param(params_vdev);
 	params_vdev->rdbk_times = 0;
-	if (!(dev->isp_state & ISP_START))
+	if (params_vdev->is_first_cfg) {
 		rkisp_params_stream_stop(params_vdev);
-
+		params_vdev->is_first_cfg = false;
+	}
+	dev->is_aiisp_yuv = false;
+	dev->is_aiisp_en = false;
+	dev->is_aiisp_first_frame = false;
+	dev->is_aiisp_l2 = false;
+	dev->is_aiisp_l2_st = false;
+	dev->is_aiisp_l2_first_cfg = false;
+	dev->is_aiisp_l2_init = false;
+	dev->is_aiisp_l2_waiting = false;
+	dev->is_aiisp_stop = false;
+	dev->is_aiisp_stopping = false;
+	memset(&dev->aiisp_cfg, 0, sizeof(dev->aiisp_cfg));
 	dev->fpn_cfg.en = 0;
 	if (dev->fpn_cfg.buf) {
 		vfree(dev->fpn_cfg.buf);
@@ -565,10 +585,12 @@ void rkisp_params_meshbuf_free(struct rkisp_isp_params_vdev *params_vdev, u64 id
 
 void rkisp_params_stream_stop(struct rkisp_isp_params_vdev *params_vdev)
 {
+	rkisp_params_disable_isp(params_vdev);
 	/* isp stop to free buf */
 	if (params_vdev->ops->stream_stop)
 		params_vdev->ops->stream_stop(params_vdev);
-	params_vdev->first_cfg_params = false;
+	if (!atomic_read(&params_vdev->open_cnt) && params_vdev->ops->fop_release)
+		params_vdev->ops->fop_release(params_vdev);
 }
 
 bool rkisp_params_check_bigmode(struct rkisp_isp_params_vdev *params_vdev)

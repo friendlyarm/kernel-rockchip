@@ -74,7 +74,11 @@ static void *ebc_dmabuf_vmap(struct dma_buf *dma_buf)
 {
 	struct ebc_dmabuf *ebcbuf = to_ebc_dmabuf(dma_buf);
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)
+	return vm_map_ram(ebcbuf->pages, ebcbuf->npages, 0);
+#else
 	return vm_map_ram(ebcbuf->pages, ebcbuf->npages, 0, PAGE_KERNEL);
+#endif
 }
 #endif
 

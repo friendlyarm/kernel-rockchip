@@ -1855,6 +1855,13 @@ out:
 	return ret;
 }
 
+int unuse_swap_pte(struct vm_area_struct *vma, pmd_t *pmd,
+		unsigned long addr, swp_entry_t entry, struct folio *folio)
+{
+	return unuse_pte(vma, pmd, addr, entry, folio);
+}
+EXPORT_SYMBOL_GPL(unuse_swap_pte);
+
 static int unuse_pte_range(struct vm_area_struct *vma, pmd_t *pmd,
 			unsigned long addr, unsigned long end,
 			unsigned int type)
@@ -3431,6 +3438,7 @@ struct swap_info_struct *page_swap_info(struct page *page)
 	swp_entry_t entry = { .val = page_private(page) };
 	return swp_swap_info(entry);
 }
+EXPORT_SYMBOL_GPL(page_swap_info);
 
 /*
  * out-of-line methods to avoid include hell.

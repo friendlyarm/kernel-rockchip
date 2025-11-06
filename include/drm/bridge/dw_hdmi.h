@@ -82,6 +82,11 @@ struct platform_device;
 #define SUPPORT_HDMI_ALLM	BIT(1)
 #define DOVI_VSIF_LEN		8
 
+#define HDMI_HDR_STATUS_CHANGED		BIT(0)
+#define HDMI_COLOR_FMT_CHANGED		BIT(1)
+#define HDMI_OUTPUT_MODE_CHANGED	BIT(2)
+#define HDMI_VSIF_CHANGED		BIT(3)
+
 enum {
 	DW_HDMI_RES_8,
 	DW_HDMI_RES_10,
@@ -273,14 +278,12 @@ struct dw_hdmi_plat_data {
 	void (*set_hdcp_status)(void *data, u8 status);
 	void (*set_hdcp2_enable)(void *data, bool enable);
 	void (*set_grf_cfg)(void *data);
-	u64 (*get_grf_color_fmt)(void *data);
 	void (*convert_to_split_mode)(struct drm_display_mode *mode);
 	void (*convert_to_origin_mode)(struct drm_display_mode *mode);
 	int (*dclk_set)(void *data, bool enable, int vp_id);
 	int (*link_clk_set)(void *data, bool enable);
 	int (*get_vp_id)(struct drm_crtc_state *crtc_state);
 	void (*update_color_format)(struct drm_connector_state *conn_state, void *data);
-	bool (*check_hdr_color_change)(struct drm_connector_state *conn_state, void *data);
 	void (*set_prev_bus_format)(void *data, unsigned long bus_format);
 	int (*get_colorimetry)(void *data, const struct edid *edid);
 	void (*set_ddc_io)(void *data, bool enable);
@@ -354,6 +357,9 @@ int dw_hdmi_get_output_type_cap(struct dw_hdmi *hdmi);
 void dw_hdmi_set_cec_adap(struct dw_hdmi *hdmi, struct cec_adapter *adap);
 void dw_hdmi_qp_set_allm_enable(struct dw_hdmi_qp *hdmi_qp, bool enable);
 void dw_hdmi_qp_handle_hpd(struct dw_hdmi_qp *hdmi, bool enable);
+void dw_hdmi_qp_set_gaming_vrr_enable(struct dw_hdmi_qp *hdmi_qp, bool enable);
+void dw_hdmi_qp_set_qms(struct dw_hdmi_qp *hdmi, u8 next_tfr, u8 m_const);
+u8 dw_hdmi_qp_get_next_tfr(struct dw_hdmi_qp *hdmi);
 
 void dw_hdmi_qp_unbind(struct dw_hdmi_qp *hdmi);
 struct dw_hdmi_qp *dw_hdmi_qp_bind(struct platform_device *pdev,

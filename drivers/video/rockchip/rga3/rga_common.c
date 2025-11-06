@@ -488,9 +488,6 @@ int rga_get_pixel_stride_from_format(uint32_t format)
 	case RGA_FORMAT_YCrCb_422_SP_10B:
 		pixel_stride = 10;
 		break;
-	case RGA_FORMAT_BPP1:
-	case RGA_FORMAT_BPP2:
-	case RGA_FORMAT_BPP4:
 	case RGA_FORMAT_BPP8:
 	case RGA_FORMAT_YCbCr_400:
 	case RGA_FORMAT_A8:
@@ -505,8 +502,15 @@ int rga_get_pixel_stride_from_format(uint32_t format)
 	case RGA_FORMAT_Y8:
 		pixel_stride = 8;
 		break;
+	case RGA_FORMAT_BPP4:
 	case RGA_FORMAT_Y4:
 		pixel_stride = 4;
+		break;
+	case RGA_FORMAT_BPP2:
+		pixel_stride = 2;
+		break;
+	case RGA_FORMAT_BPP1:
+		pixel_stride = 1;
 		break;
 	default:
 		rga_err("unknown format [0x%x]\n", format);
@@ -823,13 +827,21 @@ int rga_image_size_cal(int w, int h, int format,
 		uv = (w * h) >> 2;
 		v = uv;
 		break;
+	case RGA_FORMAT_BPP8:
 	case RGA_FORMAT_YCbCr_400:
 	case RGA_FORMAT_A8:
 	case RGA_FORMAT_Y8:
 		yrgb = w * h;
 		break;
+	case RGA_FORMAT_BPP4:
 	case RGA_FORMAT_Y4:
 		yrgb = (w * h) >> 1;
+		break;
+	case RGA_FORMAT_BPP2:
+		yrgb = (w * h) >> 2;
+		break;
+	case RGA_FORMAT_BPP1:
+		yrgb = (w * h) >> 3;
 		break;
 	default:
 		rga_err("Unsuport format [0x%x]\n", format);
@@ -924,4 +936,28 @@ void rga_dump_req(struct rga_request *request, struct rga_req *req)
 		rga_get_interp_str(req->interp.verti), req->interp.verti);
 	rga_req_log(request, "core_mask = %#x, priority = %d, in_fence = %d(%#x)\n",
 		req->core, req->priority, req->in_fence_fd, req->in_fence_fd);
+}
+
+unsigned long rga_get_free_pages(gfp_t gfp_mask, unsigned int *order, unsigned long size)
+{
+	int cur_order, max_order;
+	unsigned long pages;
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 8, 0)
+	max_order = MAX_ORDER;
+#else
+	max_order = MAX_PAGE_ORDER;
+#endif
+
+	cur_order = get_order(size);
+	if (cur_order > max_order) {
+		rga_err("Can not alloc pages with order[%d] for viraddr pages, max_order = %d\n",
+			cur_order, max_order);
+		return 0;
+	}
+
+	pages = __get_free_pages(gfp_mask, cur_order);
+	*order = cur_order;
+
+	return pages;
 }

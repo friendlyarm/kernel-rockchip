@@ -68,6 +68,8 @@
 #include <linux/uaccess.h>
 #include <linux/mroute6.h>
 
+#include <trace/hooks/net.h>
+
 #include "ip6_offload.h"
 
 MODULE_AUTHOR("Cast of dozens");
@@ -260,30 +262,31 @@ lookup_protocol:
 		 */
 		inet->inet_sport = htons(inet->inet_num);
 		err = sk->sk_prot->hash(sk);
-		if (err) {
-			sk_common_release(sk);
-			goto out;
-		}
+		if (err)
+			goto out_sk_release;
 	}
 	if (sk->sk_prot->init) {
 		err = sk->sk_prot->init(sk);
-		if (err) {
-			sk_common_release(sk);
-			goto out;
-		}
+		if (err)
+			goto out_sk_release;
 	}
 
 	if (!kern) {
 		err = BPF_CGROUP_RUN_PROG_INET_SOCK(sk);
-		if (err) {
-			sk_common_release(sk);
-			goto out;
-		}
+		if (err)
+			goto out_sk_release;
 	}
+
+	trace_android_rvh_inet_sock_create(sk);
+
 out:
 	return err;
 out_rcu_unlock:
 	rcu_read_unlock();
+	goto out;
+out_sk_release:
+	sk_common_release(sk);
+	sock->sk = NULL;
 	goto out;
 }
 
@@ -1329,6 +1332,10 @@ out_unregister_tcp_proto:
 	proto_unregister(&tcpv6_prot);
 	goto out;
 }
+#ifdef CONFIG_INITCALL_ASYNC
+rootfs_initcall(inet6_init);
+#else
 module_init(inet6_init);
+#endif
 
 MODULE_ALIAS_NETPROTO(PF_INET6);

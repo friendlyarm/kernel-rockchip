@@ -590,7 +590,7 @@ static int csi2_dphy_enable_clk(struct csi2_dphy *dphy)
 		if (dphy->csi_info.dphy_vendor[i] == PHY_VENDOR_SAMSUNG) {
 			samsung_phy = (struct samsung_mipi_dcphy *)dphy->phy_hw[i];
 			if (samsung_phy)
-				clk_prepare_enable(samsung_phy->pclk);
+				pm_runtime_get_sync(samsung_phy->dev);
 		} else {
 			hw = (struct csi2_dphy_hw *)dphy->phy_hw[i];
 			if (hw) {
@@ -615,7 +615,7 @@ static void csi2_dphy_disable_clk(struct csi2_dphy *dphy)
 		if (dphy->csi_info.dphy_vendor[i] == PHY_VENDOR_SAMSUNG) {
 			samsung_phy = (struct samsung_mipi_dcphy *)dphy->phy_hw[i];
 			if (samsung_phy)
-				clk_disable_unprepare(samsung_phy->pclk);
+				pm_runtime_put(samsung_phy->dev);
 		} else {
 			hw = (struct csi2_dphy_hw *)dphy->phy_hw[i];
 			if (hw)
@@ -1161,6 +1161,7 @@ static int rockchip_csi2_dphy_get_inno_phy_hw(struct csi2_dphy *dphy)
 				dphy->phy_index);
 			return -EINVAL;
 		}
+		dphy_hw->hw_idx = i;
 		dphy->dphy_hw_group[i] = dphy_hw;
 	}
 	return 0;
@@ -1276,8 +1277,8 @@ int rockchip_csi2_dphy_init(void)
 	return platform_driver_register(&rockchip_csi2_dphy_driver);
 }
 
-#if defined(CONFIG_VIDEO_ROCKCHIP_THUNDER_BOOT_ISP) && !defined(CONFIG_INITCALL_ASYNC)
-subsys_initcall(rockchip_csi2_dphy_init);
+#if defined(CONFIG_VIDEO_ROCKCHIP_THUNDER_BOOT_ISP)
+subsys_initcall_sync(rockchip_csi2_dphy_init);
 #else
 #if !defined(CONFIG_VIDEO_REVERSE_IMAGE)
 module_platform_driver(rockchip_csi2_dphy_driver);

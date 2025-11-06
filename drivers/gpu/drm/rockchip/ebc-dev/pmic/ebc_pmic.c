@@ -120,4 +120,21 @@ void ebc_regulator_verity_vcom(struct regulator *r)
 	}
 }
 
+//temp fix for customer
+int ebc_overlay_temp_fix(int temp)
+{
+	return temp;
+}
+
+int ebc_normal_temp_fix(int mode, int temp)
+{
+	return temp;
+}
+
+//delay time for pmic power-off after frame done, ms
+int ebc_get_power_off_delay(void)
+{
+	return 150; //ms
+}
+
 module_param(vcom, int, 0644);

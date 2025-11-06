@@ -1063,24 +1063,37 @@ enum color_space_type get_color_space_type(enum drm_color_encoding color_encodin
 	return color_space_type;
 }
 
-static int csc_get_mode_index(bool is_input_full_range, bool is_output_full_range,
-			      bool is_input_yuv, bool is_output_yuv,
-			      enum drm_color_encoding color_encoding)
+static int csc_get_mode_index(struct post_csc_convert_mode *convert_mode)
 {
 	const struct rk_csc_colorspace_info *colorspace_info;
-	int i;
+	int i, j;
 	enum color_space_type input_color_space, output_color_space;
+	bool is_input_full_range = convert_mode->is_input_full_range;
+	bool is_output_full_range = convert_mode->is_output_full_range;
+	bool is_input_yuv = convert_mode->is_input_yuv;
+	bool is_output_yuv = convert_mode->is_output_yuv;
 
-	input_color_space = get_color_space_type(color_encoding, is_input_yuv);
-	output_color_space = get_color_space_type(color_encoding, is_output_yuv);
+	for (i = 0; i < 2; i++) {
+		input_color_space = get_color_space_type(convert_mode->intput_color_encoding,
+							 is_input_yuv);
+		output_color_space = get_color_space_type(convert_mode->output_color_encoding,
+							  is_output_yuv);
 
-	for (i = 0; i < ARRAY_SIZE(g_mode_csc_coef); i++) {
-		colorspace_info = &g_mode_csc_coef[i].st_csc_color_info;
-		if (colorspace_info->input_color_space == input_color_space &&
-		    colorspace_info->output_color_space == output_color_space &&
-		    colorspace_info->in_full_range == is_input_full_range &&
-		    colorspace_info->out_full_range == is_output_full_range)
-			return i;
+		for (j = 0; j < ARRAY_SIZE(g_mode_csc_coef); j++) {
+			colorspace_info = &g_mode_csc_coef[j].st_csc_color_info;
+			if (colorspace_info->input_color_space == input_color_space &&
+			    colorspace_info->output_color_space == output_color_space &&
+			    colorspace_info->in_full_range == is_input_full_range &&
+			    colorspace_info->out_full_range == is_output_full_range)
+				return j;
+		}
+
+		/*
+		 * If no csc matrix can be found for current input/output
+		 * colorspace of post-csc, then csc matrix is found based
+		 * on colorspace of post-csc output.
+		 */
+		convert_mode->intput_color_encoding = convert_mode->output_color_encoding;
 	}
 
 	return -EINVAL;
@@ -1411,9 +1424,12 @@ static int csc_calc_adjust_output_coef(bool is_input_yuv, bool is_output_yuv,
 		csc_matrix_element_right_shift(&temp0, PQ_CSC_PARAM_FIX_BIT_WIDTH);
 		csc_matrix_multiply(&temp1, &temp0, &saturation_matrix);
 		csc_matrix_element_right_shift(&temp1, PQ_CSC_PARAM_HALF_FIX_BIT_WIDTH);
-		csc_matrix_multiply(out_matrix, &temp1, r2y_matrix);
+		csc_matrix_multiply(&temp0, &temp1, r2y_matrix);
+		csc_matrix_element_right_shift(&temp0, PQ_CSC_PARAM_FIX_BIT_WIDTH);
+		csc_matrix_multiply(out_matrix, csc_mode_cfg->pst_csc_coef, &temp0);
 		csc_matrix_element_right_shift_with_simple_round(out_matrix,
-			PQ_CSC_PARAM_FIX_BIT_WIDTH + PQ_CALC_ENHANCE_BIT);
+								 PQ_CSC_PARAM_FIX_BIT_WIDTH +
+								 PQ_CALC_ENHANCE_BIT);
 
 		dc_in_ventor.csc_offset0 = dc_in_offset;
 		dc_in_ventor.csc_offset1 = dc_in_offset;
@@ -1529,9 +1545,7 @@ int rockchip_calc_post_csc(struct post_csc *csc_cfg, struct post_csc_coef *csc_s
 	const struct rk_csc_mode_coef *csc_mode_cfg;
 	int bit_num = PQ_CSC_SIMPLE_MAT_PARAM_FIX_BIT_WIDTH;
 
-	ret = csc_get_mode_index(convert_mode->is_input_full_range,
-				 convert_mode->is_output_full_range, convert_mode->is_input_yuv,
-				 convert_mode->is_output_yuv, convert_mode->color_encoding);
+	ret = csc_get_mode_index(convert_mode);
 	if (ret < 0) {
 		DRM_ERROR("get csc index err:\n");
 		DRM_ERROR("input yuv %d full_range %d,output yuv %d full_range %d\n",

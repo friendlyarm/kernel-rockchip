@@ -395,9 +395,9 @@
 //		pinctrl-names = "default", "pmic-sleep",
 //				"pmic-power-off", "pmic-reset";
 		pinctrl-0 = <&pmic_int>;
-//		pinctrl-1 = <&soc_slppin_slp>, <&rk817_slppin_slp>;
-//		pinctrl-2 = <&soc_slppin_gpio>, <&rk817_slppin_pwrdn>;
-//		pinctrl-3 = <&soc_slppin_gpio>, <&rk817_slppin_rst>;
+//		pinctrl-1 = <&soc_slppin_slp>;
+//		pinctrl-2 = <&soc_slppin_gpio>;
+//		pinctrl-3 = <&soc_slppin_gpio>;
 		rockchip,system-power-controller;
 		wakeup-source;
 		#clock-cells = <1>;
@@ -790,6 +790,8 @@
 
 					cy,vkeys_x = <1404>;
 					cy,vkeys_y = <1872>;
+					cy,max_x = <1872>;
+					cy,max_y = <1404>;
 					cy,revert_x = <0>;
 					cy,revert_y = <0>;
 					cy,xy_exchange = <0>;

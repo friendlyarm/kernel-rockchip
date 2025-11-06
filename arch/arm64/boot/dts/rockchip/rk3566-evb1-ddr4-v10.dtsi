@@ -226,6 +226,10 @@
 	power-supply = <&vcc3v3_lcd0_n>;
 };
 
+&hynitron {
+	power-supply = <&vcc3v3_lcd0_n>;
+};
+
 &i2c2 {
 	status = "okay";
 	pinctrl-names = "default";
@@ -434,6 +438,7 @@
 };
 
 &wireless_bluetooth {
+	bt_port = "/dev/ttyS1";
 	uart_rts_gpios = <&gpio4 RK_PB6 GPIO_ACTIVE_LOW>;
 	pinctrl-names = "default", "rts_gpio";
 	pinctrl-0 = <&uart1m1_rtsn>;

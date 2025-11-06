@@ -6,15 +6,28 @@
 #include "regs.h"
 #include "version.h"
 
+#define RKFEC_VERNO_LEN 10
+
+static bool rkfec_clk_dbg;
+module_param_named(clk_dbg, rkfec_clk_dbg, bool, 0644);
+MODULE_PARM_DESC(clk_dbg, "rkfec clk set by user");
+
+static char rkfec_version[RKFEC_VERNO_LEN];
+module_param_string(version, rkfec_version, RKFEC_VERNO_LEN, 0444);
+MODULE_PARM_DESC(version, "version number");
+
 static const char * const rv1126b_fec_clks[] = {
-	"clk_fec",
 	"aclk_fec",
 	"hclk_fec",
+	"clk_fec",
 };
 
-static void rkfec_set_clk_rate(struct clk *clk, unsigned long rate)
+static int rkfec_set_clk_rate(struct clk *clk, unsigned long rate)
 {
-	clk_set_rate(clk, rate);
+	if (rkfec_clk_dbg)
+		return 0;
+
+	return clk_set_rate(clk, rate);
 }
 
 static void rkfec_soft_reset(struct rkfec_hw_dev *hw)
@@ -22,11 +35,6 @@ static void rkfec_soft_reset(struct rkfec_hw_dev *hw)
 	u32 val;
 
 	/* reset */
-	val = SYS_SOFT_RST_FBCE | SYS_SOFT_RST_ACLK;
-	writel(val, hw->base_addr + RKFEC_CLK_DIS);
-	udelay(10);
-	writel(~val, hw->base_addr + RKFEC_CLK_DIS);
-
 	if (hw->reset) {
 		reset_control_assert(hw->reset);
 		udelay(20);
@@ -41,8 +49,7 @@ static void rkfec_soft_reset(struct rkfec_hw_dev *hw)
 	}
 
 	/* clk_dis */
-	val = SYS_FEC_LGC_CKG_DIS | SYS_FEC_RAM_CKG_DIS;
-	writel(val, hw->base_addr + RKFEC_CLK_DIS);
+	writel(0, hw->base_addr + RKFEC_CLK_DIS);
 
 	/* int en */
 	val = FRM_END_P_FEC;
@@ -84,11 +91,6 @@ static int enable_sys_clk(struct rkfec_hw_dev *dev)
 		if (ret < 0)
 			goto err;
 	}
-
-	//tosee
-
-	rkfec_set_clk_rate(dev->clks[0],
-			   dev->clk_rate_tbl[dev->clk_rate_tbl_num - 1].clk_rate * 1000000);
 
 	return 0;
 
@@ -138,7 +140,7 @@ static const struct fec_clk_info rv1126b_fec_clk_rate[] = {
 		.clk_rate = 500,
 		.refer_data = 3072,
 	}, {
-		.clk_rate = 600,
+		.clk_rate = 500,
 		.refer_data = 3840,
 	}, {
 		.clk_rate = 702,
@@ -177,10 +179,12 @@ static int rkfec_hw_probe(struct platform_device *pdev)
 	int i, ret, irq;
 	bool is_mem_reserved = true;
 
-	dev_info(dev, "RK FEC Version: %d.%d.%d\n",
-		(RKFEC_DRIVER_VERSION >> 16) & 0xFF,
-		(RKFEC_DRIVER_VERSION >> 8) & 0xFF,
-		RKFEC_DRIVER_VERSION & 0xFF);
+	snprintf(rkfec_version, sizeof(rkfec_version), "v%02x.%02x.%02x",
+		RKFEC_DRIVER_VERSION >> 16,
+		(RKFEC_DRIVER_VERSION & 0xff00) >> 8,
+		RKFEC_DRIVER_VERSION & 0xff);
+
+	dev_info(dev, "rkfec driver version: %s\n", rkfec_version);
 
 	match_data = device_get_match_data(&pdev->dev);
 	if (!match_data) {
@@ -195,6 +199,7 @@ static int rkfec_hw_probe(struct platform_device *pdev)
 	dev_set_drvdata(dev, hw_dev);
 	hw_dev->dev = dev;
 	hw_dev->match_data = match_data;
+	hw_dev->fec_ver = match_data->fec_ver;
 
 	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	if (!res) {
@@ -259,7 +264,7 @@ static int rkfec_hw_probe(struct platform_device *pdev)
 
 	hw_dev->reset = devm_reset_control_array_get(dev, false, false);
 	if (IS_ERR(hw_dev->reset)) {
-		dev_info(dev, "failed to get cru reset\n");
+		dev_info(dev, "failed to get cru reset, error = %ld\n", PTR_ERR(hw_dev->reset));
 		hw_dev->reset = NULL;
 	}
 
@@ -278,6 +283,8 @@ static int rkfec_hw_probe(struct platform_device *pdev)
 	if (hw_dev->is_mmu && !is_mem_reserved)
 		hw_dev->is_dma_config = false;
 	hw_dev->mem_ops = &vb2_cma_sg_memops;
+	hw_dev->soft_reset = rkfec_soft_reset;
+	hw_dev->set_clk = rkfec_set_clk_rate;
 
 	rkfec_register_offline(hw_dev);
 

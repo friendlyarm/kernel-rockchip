@@ -44,49 +44,51 @@ static int rga_set_feature(struct rga_req *rga_base)
 	return feature;
 }
 
-static bool rga_check_csc_constant(const struct rga_hw_data *data, struct rga_req *rga_base,
-				   uint32_t mode, uint32_t flag)
-{
-	if (mode & flag)
-		return true;
-
-	if ((rga_base->full_csc.flag & 0x1) && (data->feature & RGA_FULL_CSC))
-		return true;
-
-	return false;
-}
-
 static bool rga_check_csc(const struct rga_hw_data *data, struct rga_req *rga_base)
 {
-	switch (rga_base->yuv2rgb_mode) {
-	case 0x1:
-		return rga_check_csc_constant(data, rga_base,
-					      data->csc_y2r_mode, RGA_MODE_CSC_BT601L);
-	case 0x2:
-		return rga_check_csc_constant(data, rga_base,
-					      data->csc_y2r_mode, RGA_MODE_CSC_BT601F);
-	case 0x3:
-		return rga_check_csc_constant(data, rga_base,
-					      data->csc_y2r_mode, RGA_MODE_CSC_BT709);
-	case 0x1 << 2:
-		return rga_check_csc_constant(data, rga_base,
-					      data->csc_r2y_mode, RGA_MODE_CSC_BT601F);
-	case 0x2 << 2:
-		return rga_check_csc_constant(data, rga_base,
-					      data->csc_r2y_mode, RGA_MODE_CSC_BT601L);
-	case 0x3 << 2:
-		return rga_check_csc_constant(data, rga_base,
-					      data->csc_r2y_mode, RGA_MODE_CSC_BT709);
+	switch (rga_base->yuv2rgb_mode & RGA_Y2R_MASK) {
+	case RGA_Y2R_BT601_LIMIT:
+		if (!(data->csc_y2r_mode & RGA_MODE_CSC_BT601L))
+			return false;
+
+		break;
+	case RGA_Y2R_BT601_FULL:
+		if (!(data->csc_y2r_mode & RGA_MODE_CSC_BT601F))
+			return false;
+
+		break;
+	case RGA_Y2R_BT709_LIMIT:
+		if (!(data->csc_y2r_mode & RGA_MODE_CSC_BT709))
+			return false;
+
+		break;
 	default:
 		break;
 	}
 
-	if ((rga_base->full_csc.flag & 0x1)) {
-		if (data->feature & RGA_FULL_CSC)
-			return true;
-		else
+	switch (rga_base->yuv2rgb_mode & RGA_R2Y_MASK) {
+	case RGA_R2Y_BT601_LIMIT:
+		if (!(data->csc_r2y_mode & RGA_MODE_CSC_BT601L))
 			return false;
+
+		break;
+	case RGA_R2Y_BT601_FULL:
+		if (!(data->csc_r2y_mode & RGA_MODE_CSC_BT601F))
+			return false;
+
+		break;
+	case RGA_R2Y_BT709_LIMIT:
+		if (!(data->csc_r2y_mode & RGA_MODE_CSC_BT709))
+			return false;
+
+		break;
+	default:
+		break;
 	}
+
+
+	if ((rga_base->full_csc.flag & 0x1) && !(data->feature & RGA_FULL_CSC))
+		return false;
 
 	return true;
 }

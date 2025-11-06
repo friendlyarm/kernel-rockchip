@@ -184,7 +184,7 @@ static int rkvpss_sd_s_stream(struct v4l2_subdev *sd, int on)
 	rkvpss_cmsc_config(dev, true);
 
 	if (dev->unite_mode)
-		w = w / 2 + RKMOUDLE_UNITE_EXTEND_PIXEL;
+		w = w / 2 + dev->unite_extend_pixel;
 
 	rkvpss_unite_write(dev, RKVPSS_VPSS_ONLINE2_SIZE, h << 16 | w);
 
@@ -236,6 +236,8 @@ static int rkvpss_sd_s_power(struct v4l2_subdev *sd, int on)
 				return ret;
 			}
 		}
+		v4l2_subdev_call(dev->remote_sd, core, ioctl, RKISP_VPSS_GET_UNITE_EXTEND_PIXEL,
+				 &dev->unite_extend_pixel);
 		v4l2_subdev_call(dev->remote_sd, core, ioctl, RKISP_VPSS_GET_UNITE_MODE,
 				 &dev->unite_mode);
 		ret = pm_runtime_get_sync(dev->dev);
@@ -271,14 +273,15 @@ static int rkvpss_sof(struct rkvpss_subdev *sdev, struct rkisp_vpss_sof *info)
 	dev->is_idle = false;
 
 	v4l2_dbg(3, rkvpss_debug, &dev->v4l2_dev,
-		 "%s unite_mode:%u, unite_indev:%u seq:%d\n", __func__,
-		 dev->unite_mode, dev->unite_index, info->seq);
+		 "%s unite(mode:%u indev:%u) seq:%d drop:%d\n", __func__,
+		 dev->unite_mode, dev->unite_index, info->seq, info->skip_frame);
 
 	rkvpss_cmsc_config(dev, !info->irq);
 	for (i = 0; i < vpss_outchn_max(dev->hw_dev->vpss_ver); i++) {
 		stream = &dev->stream_vdev.stream[i];
 		if (!stream->streaming)
 			continue;
+		stream->skip_frame = info->skip_frame;
 		if (stream->ops->frame_start)
 			stream->ops->frame_start(stream, info->irq);
 	}

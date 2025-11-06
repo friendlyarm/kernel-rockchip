@@ -143,21 +143,25 @@ static void RGA3_set_reg_win0_info(u8 *base, struct rga3_req *msg)
 
 	switch (msg->win0.format) {
 	case RGA_FORMAT_RGBA_8888:
+	case RGA_FORMAT_RGBX_8888:
 		win_format = 0x8;
 		pixel_width = 4;
 		win_interleaved = 2;
 		break;
 	case RGA_FORMAT_BGRA_8888:
+	case RGA_FORMAT_BGRX_8888:
 		win_format = 0x6;
 		pixel_width = 4;
 		win_interleaved = 2;
 		break;
 	case RGA_FORMAT_ARGB_8888:
+	case RGA_FORMAT_XRGB_8888:
 		win_format = 0x9;
 		pixel_width = 4;
 		win_interleaved = 2;
 		break;
 	case RGA_FORMAT_ABGR_8888:
+	case RGA_FORMAT_XBGR_8888:
 		win_format = 0x7;
 		pixel_width = 4;
 		win_interleaved = 2;
@@ -526,21 +530,25 @@ static void RGA3_set_reg_win1_info(u8 *base, struct rga3_req *msg)
 
 	switch (msg->win1.format) {
 	case RGA_FORMAT_RGBA_8888:
+	case RGA_FORMAT_RGBX_8888:
 		win_format = 0x8;
 		pixel_width = 4;
 		win_interleaved = 2;
 		break;
 	case RGA_FORMAT_BGRA_8888:
+	case RGA_FORMAT_BGRX_8888:
 		win_format = 0x6;
 		pixel_width = 4;
 		win_interleaved = 2;
 		break;
 	case RGA_FORMAT_ARGB_8888:
+	case RGA_FORMAT_XRGB_8888:
 		win_format = 0x9;
 		pixel_width = 4;
 		win_interleaved = 2;
 		break;
 	case RGA_FORMAT_ABGR_8888:
+	case RGA_FORMAT_XBGR_8888:
 		win_format = 0x7;
 		pixel_width = 4;
 		win_interleaved = 2;
@@ -817,15 +825,28 @@ static void RGA3_set_reg_wr_info(u8 *base, struct rga3_req *msg)
 
 	switch (msg->wr.format) {
 	case RGA_FORMAT_RGBA_8888:
+	case RGA_FORMAT_RGBX_8888:
 		wr_format = 0x6;
 		pixel_width = 4;
 		wr_interleaved = 2;
-		wr_pix_swp = 1;
+
+		/* fbc default RGBA8888, raster default BGRA8888 */
+		if (msg->wr.rd_mode == 1)
+			wr_pix_swp = 0;
+		else
+			wr_pix_swp = 1;
 		break;
 	case RGA_FORMAT_BGRA_8888:
+	case RGA_FORMAT_BGRX_8888:
 		wr_format = 0x6;
 		pixel_width = 4;
 		wr_interleaved = 2;
+
+		/* fbc default BGRA8888, raster default RGBA8888 */
+		if (msg->wr.rd_mode == 1)
+			wr_pix_swp = 1;
+		else
+			wr_pix_swp = 0;
 		break;
 	case RGA_FORMAT_RGB_888:
 		wr_format = 0x5;
@@ -1244,21 +1265,25 @@ static void RGA3_set_reg_overlap_info(u8 *base, struct rga3_req *msg)
 		break;
 	}
 
-	if (!config->enable && msg->abb_alpha_pass) {
+	if (!config->enable) {
 		/*
 		 * enabled by default bot_blend_m1 && bot_alpha_cal_m1 for src channel(win0)
 		 * In ABB mode, the number will be fetched according to 16*16, so it needs to
 		 * be enabled top_blend_m1 && top_alpha_cal_m1 for dst channel(wr).
 		 */
-		top_color_ctrl.bits.color_mode = RGA_ALPHA_PRE_MULTIPLIED;
+		if (msg->fg_alpha_pass) {
+			top_color_ctrl.bits.color_mode = RGA_ALPHA_PRE_MULTIPLIED;
 
-		top_alpha_ctrl.bits.blend_mode = RGA_ALPHA_PER_PIXEL;
-		top_alpha_ctrl.bits.alpha_cal_mode = RGA_ALPHA_NO_SATURATION;
+			top_alpha_ctrl.bits.blend_mode = RGA_ALPHA_PER_PIXEL;
+			top_alpha_ctrl.bits.alpha_cal_mode = RGA_ALPHA_NO_SATURATION;
+		}
 
-		bottom_color_ctrl.bits.color_mode = RGA_ALPHA_PRE_MULTIPLIED;
+		if (msg->bg_alpha_pass) {
+			bottom_color_ctrl.bits.color_mode = RGA_ALPHA_PRE_MULTIPLIED;
 
-		bottom_alpha_ctrl.bits.blend_mode = RGA_ALPHA_PER_PIXEL;
-		bottom_alpha_ctrl.bits.alpha_cal_mode = RGA_ALPHA_NO_SATURATION;
+			bottom_alpha_ctrl.bits.blend_mode = RGA_ALPHA_PER_PIXEL;
+			bottom_alpha_ctrl.bits.alpha_cal_mode = RGA_ALPHA_NO_SATURATION;
+		}
 	} else {
 		top_color_ctrl.bits.color_mode =
 			config->fg_pre_multiplied ?
@@ -1467,18 +1492,6 @@ static void rga_cmd_to_rga3_cmd(struct rga_req *req_rga, struct rga3_req *req)
 		break;
 	}
 
-	req->win0_a_global_val = req_rga->alpha_global_value;
-	req->win1_a_global_val = req_rga->alpha_global_value;
-
-	/* fixup yuv/rgb convert to rgba missing alpha channel */
-	if (!(req_rga->alpha_rop_flag & 1)) {
-		if (!rga_is_alpha_format(req_rga->src.format) &&
-		    rga_is_alpha_format(req_rga->dst.format)) {
-			req->alpha_config.fg_global_alpha_value = 0xff;
-			req->alpha_config.bg_global_alpha_value = 0xff;
-		}
-	}
-
 	/* simple win can not support dst offset */
 	if ((!((req_rga->alpha_rop_flag) & 1)) &&
 	    (req_rga->dst.x_offset == 0 && req_rga->dst.y_offset == 0) &&
@@ -1488,14 +1501,6 @@ static void rga_cmd_to_rga3_cmd(struct rga_req *req_rga, struct rga3_req *req)
 		 *     src => win0
 		 *     dst => wr
 		 */
-
-		/*
-		 * enabled by default bot_blend_m1 && bot_alpha_cal_m1 for src channel(win0)
-		 * In ABB mode, the number will be fetched according to 16*16, so it needs to
-		 * be enabled top_blend_m1 && top_alpha_cal_m1 for dst channel(wr).
-		 */
-		if (rga_is_alpha_format(req_rga->src.format))
-			req->abb_alpha_pass = true;
 
 		set_win_info(&req->win0, &req_rga->src);
 
@@ -1518,14 +1523,6 @@ static void rga_cmd_to_rga3_cmd(struct rga_req *req_rga, struct rga3_req *req)
 		 *     src1/dst => win0
 		 *     dst => wr
 		 */
-
-		/*
-		 * enabled by default top_blend_m1 && top_alpha_cal_m1 for src channel(win1)
-		 * In ABB mode, the number will be fetched according to 16*16, so it needs to
-		 * be enabled bot_blend_m1 && bot_alpha_cal_m1 for src1/dst channel(win0).
-		 */
-		if (rga_is_alpha_format(req_rga->src.format))
-			req->abb_alpha_pass = true;
 
 		if (req_rga->pat.yrgb_addr != 0) {
 			if (req_rga->src.yrgb_addr == req_rga->dst.yrgb_addr) {
@@ -1586,9 +1583,6 @@ static void rga_cmd_to_rga3_cmd(struct rga_req *req_rga, struct rga3_req *req)
 			set_win_info(&req->win0, &req_rga->dst);
 			addr_copy(&req->win0, &req_rga->dst);
 			req->win0.format = req_rga->dst.format;
-
-			/* only win1 && wr support fbcd, win0 default raster */
-			req->win0.rd_mode = 0;
 
 			/* set win0 dst size */
 			req->win0.dst_act_w = req_rga->dst.act_w;
@@ -1665,6 +1659,31 @@ static void rga_cmd_to_rga3_cmd(struct rga_req *req_rga, struct rga3_req *req)
 			}
 
 			req->alpha_config.mode = req_rga->PD_mode;
+		}
+	} else {
+		/*
+		 * top/bottom Layer binding:
+		 *     top/fg => win1/wr
+		 *     bottom/bg => win0
+		 *   The alpha channel of RGA3 is controlled by the overlap register, choosing
+		 * to use globalAlpha or perpixelAlpha.
+		 *   When the input/output format does not have alpha, need to use globalAlpha to
+		 * control the output alpha to '0xff'.
+		 */
+		if (req->win1.enable) {
+			req->bg_alpha_pass = true;
+
+			if (rga_is_alpha_format(req->win1.format) &&
+			    rga_is_alpha_format(req->wr.format))
+				req->fg_alpha_pass = true;
+			else
+				req->alpha_config.fg_global_alpha_value = 0xff;
+		} else {
+			if (rga_is_alpha_format(req->win0.format) &&
+			    rga_is_alpha_format(req->wr.format))
+				req->bg_alpha_pass = true;
+			else
+				req->alpha_config.bg_global_alpha_value = 0xff;
 		}
 	}
 
@@ -2070,6 +2089,27 @@ static void rga3_dump_read_back_reg(struct rga_job *job, struct rga_scheduler_t 
 			cmd_reg[2 + i * 4], cmd_reg[3 + i * 4]);
 }
 
+static void rga3_dump_read_back_iommu_reg(struct rga_job *job, struct rga_scheduler_t *scheduler)
+{
+	int i;
+	unsigned long flags;
+	uint32_t cmd_reg[12] = {0};
+
+	spin_lock_irqsave(&scheduler->irq_lock, flags);
+
+	for (i = 0; i < 12; i++)
+		cmd_reg[i] = rga_read(RGA3_IOMMU_REG_BASE + i * 4, scheduler);
+
+	spin_unlock_irqrestore(&scheduler->irq_lock, flags);
+
+	rga_job_log(job, "IOMMU_READ_BACK_REG\n");
+	for (i = 0; i < 3; i++)
+		rga_job_log(job, "0x%04x : %.8x %.8x %.8x %.8x\n",
+			RGA3_IOMMU_REG_BASE + i * 0x10,
+			cmd_reg[0 + i * 4], cmd_reg[1 + i * 4],
+			cmd_reg[2 + i * 4], cmd_reg[3 + i * 4]);
+}
+
 static int rga3_set_reg(struct rga_job *job, struct rga_scheduler_t *scheduler)
 {
 	int i;
@@ -2098,6 +2138,8 @@ static int rga3_set_reg(struct rga_job *job, struct rga_scheduler_t *scheduler)
 				RGA3_CMD_REG_BASE + i * 0x10,
 				cmd[0 + i * 4], cmd[1 + i * 4],
 				cmd[2 + i * 4], cmd[3 + i * 4]);
+
+		rga3_dump_read_back_iommu_reg(job, scheduler);
 	}
 
 	/* All CMD finish int */
@@ -2132,6 +2174,7 @@ static int rga3_set_reg(struct rga_job *job, struct rga_scheduler_t *scheduler)
 	if (DEBUGGER_EN(REG)) {
 		rga3_dump_read_back_sys_reg(job, scheduler);
 		rga3_dump_read_back_reg(job, scheduler);
+		rga3_dump_read_back_iommu_reg(job, scheduler);
 	}
 
 	return 0;

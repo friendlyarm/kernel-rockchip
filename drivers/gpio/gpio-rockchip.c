@@ -327,10 +327,28 @@ static int rockchip_gpio_set_debounce(struct gpio_chip *gc,
 
 	/* Enable or disable dbclk at last */
 	if (div_debounce_support) {
-		if (debounce)
-			clk_prepare_enable(bank->db_clk);
-		else
-			clk_disable_unprepare(bank->db_clk);
+		raw_spin_lock_irqsave(&bank->slock, flags);
+
+		if (debounce) {
+			if (bitmap_empty(bank->db_clk_bitmap, RK_GPIO_BANK_MAX_PIN)) {
+				int ret = clk_enable(bank->db_clk);
+
+				if (ret)
+					dev_warn(bank->dev, "Failed to enable db_clk: %d\n", ret);
+				else
+					set_bit(offset, bank->db_clk_bitmap);
+			} else {
+				set_bit(offset, bank->db_clk_bitmap);
+			}
+		} else {
+			if (!bitmap_empty(bank->db_clk_bitmap, RK_GPIO_BANK_MAX_PIN)) {
+				clear_bit(offset, bank->db_clk_bitmap);
+				if (bitmap_empty(bank->db_clk_bitmap, RK_GPIO_BANK_MAX_PIN))
+					clk_disable(bank->db_clk);
+			}
+		}
+
+		raw_spin_unlock_irqrestore(&bank->slock, flags);
 	} else {
 		return -EOPNOTSUPP;
 	}
@@ -1142,8 +1160,16 @@ static int rockchip_gpio_probe(struct platform_device *pdev)
 		}
 	}
 
-	clk_prepare_enable(bank->clk);
-	clk_prepare_enable(bank->db_clk);
+	ret = clk_prepare_enable(bank->clk);
+	if (ret) {
+		dev_err(bank->dev, "Failed to enable GPIO clock: %d\n", ret);
+		return ret;
+	}
+	ret = clk_prepare(bank->db_clk);
+	if (ret) {
+		dev_warn(bank->dev, "Failed to prepare db_clk: %d\n", ret);
+		bank->db_clk = NULL;
+	}
 
 	ret = rockchip_gpio_parse_irqs(pdev, bank);
 	if (ret < 0)
@@ -1222,7 +1248,7 @@ err_unlock:
 	mutex_unlock(&bank->deferred_lock);
 err_clk:
 	clk_disable_unprepare(bank->clk);
-	clk_disable_unprepare(bank->db_clk);
+	clk_unprepare(bank->db_clk);
 
 	return ret;
 }
@@ -1243,7 +1269,10 @@ static int rockchip_gpio_remove(struct platform_device *pdev)
 	rockchip_gpio_remove_cpuhp();
 
 	clk_disable_unprepare(bank->clk);
-	clk_disable_unprepare(bank->db_clk);
+	if (bitmap_empty(bank->db_clk_bitmap, RK_GPIO_BANK_MAX_PIN))
+		clk_unprepare(bank->db_clk);
+	else
+		clk_disable_unprepare(bank->db_clk);
 	gpiochip_remove(&bank->gpio_chip);
 
 	return 0;

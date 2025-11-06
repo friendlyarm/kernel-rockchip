@@ -117,8 +117,18 @@
 #define FEC_WR_VIR_STRIDE_Y(x)          ((x) & 0x3fff)
 #define FEC_WR_VIR_STRIDE_C(x)          (((x) & 0x3fff) << 16)
 
+/* FEC_WR_FBCE_HEAD_OFFSET */
+#define SW_FEC_WR_FBCE_HEAD_OFFSET(x)   ((x) << 4)
+
 /* LUT SIZE */
 #define SW_LUT_SIZE(x)                  ((x) & 0x3fffff)
+
+/* FEC_CACHE_CTRL */
+#define SW_CACHE_LINESIZE(x)		((x & 0x3) << 4)
+#define SW_CACHE_FORCE_BSP(x)		((x & 0x1) << 12)
+#define SW_REPLACE_STRATEGY(x)		((x & 0x1) << 9)
+#define SW_CACHELINE_EN(x)		((x & 0x1) << 13)
+#define SW_CACHE_BYPASS_EN(x)		((x & 0x1) << 6)
 
 /* FEC_INT_EN */
 #define PBUF_BD_CRS_P                   BIT(0)

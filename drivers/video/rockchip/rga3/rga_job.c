@@ -16,7 +16,7 @@
 static void rga_job_free(struct rga_job *job)
 {
 	if (job->cmd_buf)
-		rga_dma_free(job->cmd_buf);
+		rga_dma_buf_pool_free(job->scheduler->cmd_buf_pool, job->cmd_buf);
 
 	kfree(job);
 }
@@ -385,8 +385,7 @@ static struct rga_scheduler_t *rga_job_schedule(struct rga_job *job)
 		job->core = rga_job_assign(job);
 		if (job->core <= 0) {
 			rga_job_err(job, "job assign failed");
-			job->ret = -EINVAL;
-			return NULL;
+			return ERR_PTR(-EINVAL);
 		}
 	} else {
 		job->core = rga_drvdata->scheduler[0]->core;
@@ -396,8 +395,7 @@ static struct rga_scheduler_t *rga_job_schedule(struct rga_job *job)
 	scheduler = job->scheduler;
 	if (scheduler == NULL) {
 		rga_job_err(job, "failed to get scheduler, %s(%d)\n", __func__, __LINE__);
-		job->ret = -EFAULT;
-		return NULL;
+		return ERR_PTR(-EFAULT);
 	}
 
 	return scheduler;
@@ -421,34 +419,34 @@ int rga_job_commit(struct rga_req *rga_command_base, struct rga_request *request
 	job->mm = request->current_mm;
 
 	scheduler = rga_job_schedule(job);
-	if (scheduler == NULL) {
+	if (IS_ERR(scheduler)) {
+		ret = PTR_ERR(scheduler);
 		goto err_free_job;
 	}
 
-	job->cmd_buf = rga_dma_alloc_coherent(scheduler, RGA_CMD_REG_SIZE);
+	job->cmd_buf = rga_dma_buf_pool_alloc(scheduler->cmd_buf_pool);
 	if (job->cmd_buf == NULL) {
 		rga_job_err(job, "failed to alloc command buffer.\n");
+		ret = -ENOMEM;
 		goto err_free_job;
 	}
 
 	/* Memory mapping needs to keep pd enabled. */
-	if (rga_power_enable(scheduler) < 0) {
+	ret = rga_power_enable(scheduler);
+	if (ret < 0) {
 		rga_job_err(job, "power enable failed");
-		job->ret = -EFAULT;
 		goto err_free_cmd_buf;
 	}
 
 	ret = rga_mm_map_job_info(job);
 	if (ret < 0) {
 		rga_job_err(job, "%s: failed to map job info\n", __func__);
-		job->ret = ret;
 		goto err_power_disable;
 	}
 
 	ret = scheduler->ops->init_reg(job);
 	if (ret < 0) {
 		rga_job_err(job, "%s: init reg failed", __func__);
-		job->ret = ret;
 		goto err_unmap_job_info;
 	}
 
@@ -467,11 +465,10 @@ err_power_disable:
 	rga_power_disable(scheduler);
 
 err_free_cmd_buf:
-	rga_dma_free(job->cmd_buf);
+	rga_dma_buf_pool_free(scheduler->cmd_buf_pool, job->cmd_buf);
 	job->cmd_buf = NULL;
 
 err_free_job:
-	ret = job->ret;
 	rga_job_free(job);
 
 	return ret;
@@ -860,7 +857,8 @@ void rga_request_session_destroy_abort(struct rga_session *session)
 
 	idr_for_each_entry(&request_manager->request_idr, request, request_id) {
 		if (session == request->session) {
-			rga_req_err(request, "destroy when the user exits");
+			rga_req_err(request, "destroy when the user exits, current refcount = %d\n",
+				kref_read(&request->refcount));
 			rga_request_put(request);
 		}
 	}
@@ -1404,6 +1402,8 @@ int rga_request_free(struct rga_request *request)
 	if (task_list != NULL)
 		kfree(task_list);
 
+	rga_session_put(request->session);
+
 	kfree(request);
 
 	return 0;
@@ -1475,7 +1475,10 @@ int rga_request_alloc(uint32_t flags, struct rga_session *session)
 
 	request->pid = current->pid;
 	request->flags = flags;
+
+	rga_session_get(session);
 	request->session = session;
+
 	kref_init(&request->refcount);
 
 	/*
@@ -1491,6 +1494,7 @@ int rga_request_alloc(uint32_t flags, struct rga_session *session)
 		rga_err("request alloc id failed!\n");
 
 		mutex_unlock(&request_manager->lock);
+		rga_session_put(session);
 		kfree(request);
 		return new_id;
 	}

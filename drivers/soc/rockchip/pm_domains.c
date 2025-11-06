@@ -399,9 +399,6 @@ static void rockchip_pmu_unlock(struct rockchip_pm_domain *pd)
 	DOMAIN_M_O(name, pwr, pwr, 0, req, idle, idle, r_offset, wakeup, false)
 
 #define DOMAIN_RV1126B(name, pwr, req, wakeup)			\
-	DOMAIN_M_G(name, pwr, pwr, req, req, req, req, wakeup, false)
-
-#define DOMAIN_RV1126B_P(name, pwr, req, wakeup)			\
 	DOMAIN_M_G(name, pwr, pwr, req, req, req, req, wakeup, true)
 
 #define DOMAIN_RK3288(name, pwr, status, req, wakeup)		\
@@ -1914,10 +1911,10 @@ static const struct rockchip_domain_info rv1126_pm_domains[] = {
 };
 
 static const struct rockchip_domain_info rv1126b_pm_domains[] = {
-					     /* name       pwr     req      wakeup */
-	[RV1126B_PD_NPU]	= DOMAIN_RV1126B("npu",    BIT(0), BIT(8),  false),
-	[RV1126B_PD_VDO]	= DOMAIN_RV1126B("vdo",    BIT(1), BIT(9),  false),
-	[RV1126B_PD_AISP]	= DOMAIN_RV1126B_P("aisp", BIT(2), BIT(10), false),
+					      /* name    pwr     req      wakeup */
+	[RV1126B_PD_NPU]	= DOMAIN_RV1126B("npu",  BIT(0), BIT(8),  false),
+	[RV1126B_PD_VDO]	= DOMAIN_RV1126B("vdo",  BIT(1), BIT(9),  false),
+	[RV1126B_PD_AISP]	= DOMAIN_RV1126B("aisp", BIT(2), BIT(10), false),
 };
 
 static const struct rockchip_domain_info rk1808_pm_domains[] = {

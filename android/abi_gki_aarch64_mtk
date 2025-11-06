@@ -152,6 +152,7 @@
   class_dev_iter_next
   class_find_device
   class_for_each_device
+  class_interface_register
   __class_register
   class_unregister
   clear_page
@@ -415,6 +416,7 @@
   device_create_with_groups
   device_del
   device_destroy
+  device_find_any_child
   device_find_child
   device_find_child_by_name
   device_for_each_child
@@ -530,6 +532,7 @@
   devm_memremap_pages
   devm_mfd_add_devices
   devm_nvmem_cell_get
+  devm_nvmem_cell_put
   devm_nvmem_device_get
   devm_nvmem_register
   devm_of_icc_get
@@ -1029,6 +1032,7 @@
   fsg_common_set_inquiry_string
   fsg_common_set_sysfs
   fsg_config_from_params
+  fw_devlink_purge_absent_suppliers
   fwnode_device_is_available
   fwnode_get_name
   fwnode_get_named_child_node
@@ -1152,6 +1156,7 @@
   handle_sysrq
   have_governor_per_policy
   hci_cmd_sync_status
+  hdmi_audio_infoframe_pack_for_dp
   hex2bin
   hex_asc
   hex_asc_upper
@@ -1720,7 +1725,14 @@
   net_selftest_get_count
   net_selftest_get_strings
   nf_conntrack_destroy
+  nfnetlink_subsys_register
+  nfnetlink_subsys_unregister
+  nfnetlink_unicast
+  nfnl_lock
+  nfnl_unlock
   nf_register_net_hooks
+  nf_sk_lookup_slow_v4
+  nf_sk_lookup_slow_v6
   nf_unregister_net_hooks
   nla_find
   nla_memcpy
@@ -3110,6 +3122,7 @@
   typec_partner_set_identity
   typec_partner_set_pd_revision
   typec_partner_set_svdm_version
+  typec_port_register_altmodes
   typec_register_partner
   typec_register_port
   typec_set_data_role
@@ -3218,6 +3231,7 @@
   usb_autopm_put_interface
   usb_autopm_put_interface_async
   usb_check_bulk_endpoints
+  usb_check_int_endpoints
   usb_clear_halt
   usb_composite_probe
   usb_composite_unregister
@@ -3569,6 +3583,8 @@
   xsk_tx_peek_desc
   xsk_tx_release
   xsk_uses_need_wakeup
+  xt_register_matches
+  xt_unregister_matches
   zlib_deflate
   zlib_deflateEnd
   zlib_deflateInit2

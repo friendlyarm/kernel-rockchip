@@ -144,6 +144,8 @@ static u32 ieee80211_hw_conf_chan(struct ieee80211_local *local)
 	}
 
 	power = ieee80211_chandef_max_power(&chandef);
+	if (local->user_power_level != IEEE80211_UNSET_POWER_LEVEL)
+		power = min(local->user_power_level, power);
 
 	rcu_read_lock();
 	list_for_each_entry_rcu(sdata, &local->interfaces, list) {
@@ -1402,6 +1404,18 @@ int ieee80211_register_hw(struct ieee80211_hw *hw)
 		if (result)
 			wiphy_warn(local->hw.wiphy,
 				   "Failed to add default virtual iface\n");
+	}
+
+	/* add one default AP interface if supported */
+	if (local->hw.wiphy->interface_modes & (BIT(NL80211_IFTYPE_P2P_GO) |
+	    BIT(NL80211_IFTYPE_P2P_CLIENT)) && !ieee80211_hw_check(hw, NO_AUTO_VIF)) {
+		struct vif_params params = {0};
+
+		result = ieee80211_if_add(local, "p2p%d", NET_NAME_ENUM, NULL,
+					  NL80211_IFTYPE_STATION, &params);
+		if (result)
+			wiphy_warn(local->hw.wiphy,
+				   "Failed to add p2p virtual iface\n");
 	}
 
 	wiphy_unlock(hw->wiphy);

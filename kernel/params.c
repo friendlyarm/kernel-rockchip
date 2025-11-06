@@ -945,7 +945,9 @@ int module_sysfs_initialized;
 static void module_kobj_release(struct kobject *kobj)
 {
 	struct module_kobject *mk = to_module_kobject(kobj);
-	complete(mk->kobj_completion);
+
+	if (mk->kobj_completion)
+		complete(mk->kobj_completion);
 }
 
 struct kobj_type module_ktype = {
@@ -971,6 +973,10 @@ static int __init param_sysfs_init(void)
 
 	return 0;
 }
+#ifdef CONFIG_INITCALL_ASYNC
+arch_initcall_sync(param_sysfs_init);
+#else
 subsys_initcall(param_sysfs_init);
+#endif
 
 #endif /* CONFIG_SYSFS */

@@ -113,6 +113,13 @@ enum csi2_err {
 	RK_CSI2_ERR_FRM_SEQ_ERR,
 	RK_CSI2_ERR_CRC_ONCE,
 	RK_CSI2_ERR_CRC,
+	RK_CSI2_ERR_ECC2,
+	RK_CSI2_ERR_CTRL,
+	RK_CSI2_ERR_ULPM,
+	RK_CSI2_ERR_SOT,
+	RK_CSI2_ERR_ECC,
+	RK_CSI2_ERR_ID,
+	RK_CSI2_ERR_CODE,
 	RK_CSI2_ERR_ALL,
 	RK_CSI2_ERR_MAX
 };
@@ -176,6 +183,8 @@ struct csi2_dev {
 	struct rkcif_csi_info	csi_info;
 	const char		*dev_name;
 	int			sw_dbg;
+	u64			irq1_timestamp;
+	u64			irq2_timestamp;
 };
 
 struct csi2_hw {
@@ -195,6 +204,7 @@ struct csi2_hw {
 	int			irq1;
 	int			irq2;
 	const char		*dev_name;
+	atomic_t		stream_count;
 };
 
 u32 rkcif_csi2_get_sof(struct csi2_dev *csi2_dev);

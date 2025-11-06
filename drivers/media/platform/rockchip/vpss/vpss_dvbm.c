@@ -20,7 +20,7 @@ static struct dvbm_port *g_dvbm;
 
 int rkvpss_dvbm_get(struct rkvpss_device *vpss_dev)
 {
-	struct device_node *np = vpss_dev->dev->of_node;
+	struct device_node *np = vpss_dev->hw_dev->dev->of_node;
 	struct device_node *np_dvbm = of_parse_phandle(np, "dvbm", 0);
 	int ret = 0;
 
@@ -35,7 +35,10 @@ int rkvpss_dvbm_get(struct rkvpss_device *vpss_dev)
 	}
 
 	of_node_put(np_dvbm);
-
+	if (IS_ERR_OR_NULL(g_dvbm)) {
+		g_dvbm = NULL;
+		ret = -EINVAL;
+	}
 	return ret;
 }
 
@@ -47,6 +50,14 @@ int rkvpss_dvbm_init(struct rkvpss_stream *stream)
 
 	if (!g_dvbm)
 		return -EINVAL;
+	if (vpss_dev->hw_dev->dvbm_flag == DVBM_OFFLINE) {
+		v4l2_err(&vpss_dev->v4l2_dev,
+			"offline dvbm already set, online dvbm set fail.\n");
+		return -EINVAL;
+	}
+
+	vpss_dev->hw_dev->dvbm_refcnt++;
+	vpss_dev->hw_dev->dvbm_flag = DVBM_ONLINE;
 
 	width = stream->out_fmt.plane_fmt[0].bytesperline;
 	height = stream->out_fmt.height;
@@ -61,9 +72,10 @@ int rkvpss_dvbm_init(struct rkvpss_stream *stream)
 	dvbm_cfg.cbuf_top = dvbm_cfg.cbuf_bot + (width * wrap_line / 2);
 	dvbm_cfg.cbuf_lstd = width;
 	dvbm_cfg.cbuf_fstd = dvbm_cfg.ybuf_fstd / 2;
+	dvbm_cfg.chan_id = vpss_dev->dev_id;
 
 	rk_dvbm_ctrl(g_dvbm, DVBM_VPSS_SET_CFG, &dvbm_cfg);
-	rk_dvbm_link(g_dvbm, 0);
+	rk_dvbm_link(g_dvbm, vpss_dev->dev_id);
 	return 0;
 }
 
@@ -73,7 +85,12 @@ void rkvpss_dvbm_deinit(struct rkvpss_device *vpss_dev)
 		pr_err("g_dvbm %p or vpss_dev %p is NULL\n", g_dvbm, vpss_dev);
 		return;
 	}
-	rk_dvbm_unlink(g_dvbm, 0);
+
+	vpss_dev->hw_dev->dvbm_refcnt--;
+	if (vpss_dev->hw_dev->dvbm_refcnt <= 0)
+		vpss_dev->hw_dev->dvbm_flag = DVBM_DEINIT;
+
+	rk_dvbm_unlink(g_dvbm, vpss_dev->dev_id);
 }
 
 int rkvpss_dvbm_event(struct rkvpss_device *vpss_dev, u32 event)

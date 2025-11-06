@@ -129,7 +129,7 @@
 		compatible = "ethernet-phy-id0680.8101", "ethernet-phy-ieee802.3-c22";
 		reg = <2>;
 		clocks = <&cru CLK_MACPHY>;
-		clock-frequency = <50000000>;
+		clock-frequency = <24000000>;
 		resets = <&cru SRST_RESETN_MACPHY>;
 		phy-is-integrated;
 	};

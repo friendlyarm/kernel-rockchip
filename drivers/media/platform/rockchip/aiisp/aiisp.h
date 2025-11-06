@@ -22,6 +22,7 @@
 #include <media/v4l2-ioctl.h>
 #include <media/videobuf2-core.h>
 #include <media/v4l2-event.h>
+#include <soc/rockchip/rockchip_aiisp.h>
 #include "hw.h"
 
 #define DRIVER_NAME "rkaiisp"
@@ -30,11 +31,15 @@
 #define RKAIISP_V4L2_EVENT_ELEMS	4
 
 #define RKAIISP_MAX_CHANNEL		7
-#define RKAIISP_TMP_BUF_CNT		2
+#define RKAIISP_LASTOUT_BUF_CNT		2
 #define RKAIISP_DEFAULT_MAXRUNCNT	8
 #define RKAIISP_DEFAULT_PARASIZE	(16 * 1024)
 #define RKAIISP_SW_REG_SIZE		0x3000
 #define RKAIISP_SW_MAX_SIZE		(RKAIISP_SW_REG_SIZE * 2)
+#define RKAIISP_AIRMS_BUF_MAXCNT	8
+#define RKAIISP_AIRMS_MAX_WIDTH		4096
+#define RKAIISP_AIRMS_EXTEND_PIXEL	16
+#define RKAIISP_MIN(a, b)		((a) < (b) ? (a) : (b))
 
 enum rkaiisp_irqhdl_ret {
 	NOT_WREND		= (0 << 0),
@@ -71,6 +76,9 @@ struct rkaiisp_dummy_buffer {
 	void *vaddr;
 	u32 size;
 	void *mem_priv;
+	bool is_need_vaddr;
+	bool is_need_dbuf;
+	bool is_need_dmafd;
 };
 
 struct rkaiisp_buffer_size {
@@ -90,12 +98,14 @@ struct rkaiisp_device {
 	void *sw_base_addr;
 	struct v4l2_device v4l2_dev;
 	struct media_device media_dev;
+	struct proc_dir_entry *procfs;
 	struct device *dev;
 
 	const struct vb2_mem_ops *mem_ops;
 	spinlock_t config_lock;
 	struct mutex apilock;
 	wait_queue_head_t sync_onoff;
+	atomic_t opencnt;
 
 	struct rkaiisp_hw_dev *hw_dev;
 	bool is_hw_link;
@@ -108,11 +118,23 @@ struct rkaiisp_device {
 	struct rkaiisp_dummy_buffer aiprebuf[RKISP_BUFFER_MAX];
 	struct rkaiisp_dummy_buffer vpslbuf[RKISP_BUFFER_MAX];
 	struct rkaiisp_dummy_buffer aiispbuf[RKISP_BUFFER_MAX];
-	struct rkaiisp_dummy_buffer temp_buf[RKAIISP_TMP_BUF_CNT];
+	struct rkaiisp_dummy_buffer ynrinbuf[RKISP_BUFFER_MAX];
+	struct rkaiisp_dummy_buffer temp_buf;
+	struct rkaiisp_dummy_buffer *lastout_buf[RKAIISP_LASTOUT_BUF_CNT];
 	u32 outbuf_idx;
 
+	bool is_parthdl;
+	struct rkaiisp_rmsbuf_info rmsbuf;
+	struct rkaiisp_rmsbuf_info part_rmsbuf;
+	struct rkaiisp_dummy_buffer rms_inbuf[RKAIISP_AIRMS_BUF_MAXCNT];
+	struct rkaiisp_dummy_buffer rms_outbuf[RKAIISP_AIRMS_BUF_MAXCNT];
+	struct rkaiisp_dummy_buffer narmap_buf;
+
+	struct aiisp_aiynr_ybuf_cfg ynr_ybuf_cfg;
+	struct rkaiisp_dummy_buffer ynroutbuf[RKAIISP_AIYNR_YBUF_NUM_MAX];
+
 	struct kfifo idxbuf_kfifo;
-	struct rkisp_aiisp_st curr_idxbuf;
+	union rkaiisp_queue_buf curr_idxbuf;
 
 	struct rkaiisp_vdev_node vnode;
 	struct list_head params;
@@ -121,21 +143,40 @@ struct rkaiisp_device {
 
 	struct rkaiisp_buffer_size outbuf_size[RKAIISP_MAX_RUNCNT];
 	struct rkaiisp_buffer_size chn_size[RKAIISP_MAX_CHANNEL];
+	enum rkaiisp_exealgo exealgo;
 	enum rkaiisp_exemode exemode;
 	enum rkaiisp_model_mode model_mode;
 	enum rkaiisp_hwstate hwstate;
+	enum rkaiisp_mem_mode mem_mode;
 	u32 para_size;
 	u32 max_runcnt;
 	u32 model_runcnt;
 	u32 run_idx;
 	u32 frame_id;
 
+	u32 parthdl_idx;
+	u32 parthdl_num;
+	u32 parthdl_image_oft;
+
+	u64 pre_frm_st;
+	u64 frm_st;
+	u64 frm_ed;
+	u32 frm_interval;
+	u32 frm_oversdtim_cnt;
+	u32 isr_buserr_cnt;
+	u32 isr_wrend_cnt;
+
 	bool streamon;
 	bool showreg;
+	bool init_buf;
+	bool is_state_err;
+
+	u8 iq_parambuf_num;
 };
 
 extern int rkaiisp_debug;
 extern int rkaiisp_showreg;
+extern int rkaiisp_stdfps;
 
 static inline struct rkaiisp_buffer *to_rkaiisp_buffer(struct vb2_v4l2_buffer *vb)
 {
@@ -168,8 +209,7 @@ static inline u32 rkaiisp_read(struct rkaiisp_device *aidev, u32 reg, bool is_di
 }
 
 extern struct platform_driver rkaiisp_plat_drv;
-int rkaiisp_queue_ispbuf(struct rkaiisp_device *aidev, struct rkisp_aiisp_st *idxbuf);
-void rkaiisp_update_list_reg(struct rkaiisp_device *aidev);
+int rkaiisp_set_aiynr_ybuf(struct rkaiisp_device *aidev, struct aiisp_aiynr_ybuf_cfg *buf_cfg);
 void rkaiisp_trigger(struct rkaiisp_device *aidev);
 int rkaiisp_get_idxbuf_len(struct rkaiisp_device *aidev);
 enum rkaiisp_irqhdl_ret rkaiisp_irq_hdl(struct rkaiisp_device *aidev, u32 mi_mis);

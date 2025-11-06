@@ -580,13 +580,16 @@ static int rk_pcie_init_dma_trx(struct rk_pcie *rk_pcie)
 	if (!rk_pcie_udma_enabled(rk_pcie))
 		return 0;
 
-	rk_pcie->dma_obj = pcie_dw_dmatest_register(rk_pcie->pci->dev, true);
-	if (IS_ERR(rk_pcie->dma_obj)) {
-		dev_err(rk_pcie->pci->dev, "failed to prepare dmatest\n");
-		return -EINVAL;
-	} else if (!rk_pcie->dma_obj) { /* !CONFIG_ROCKCHIP_PCIE_DMA_OBJ */
-		return 0;
+	if (IS_ENABLED(CONFIG_PCIE_DW_ROCKCHIP_RC_DMATEST)) {
+		rk_pcie->dma_obj = pcie_dw_dmatest_register(rk_pcie->pci->dev, true);
+		if (IS_ERR(rk_pcie->dma_obj)) {
+			dev_err(rk_pcie->pci->dev, "failed to prepare dmatest\n");
+			return -EINVAL;
+		}
 	}
+
+	if (!rk_pcie->dma_obj)
+		return 0;
 
 	/* Enable client write and read interrupt */
 	rk_pcie_writel_apb(rk_pcie, PCIE_CLIENT_INTR_MASK, 0xc000000);
@@ -1539,14 +1542,26 @@ disable_vpcie3v3:
 
 static int rk_pcie_hardware_io_unconfig(struct rk_pcie *rk_pcie)
 {
+	/*
+	 * PCI Express Card Electromechanical Specification Revision 3.0
+	 * 2.2.3. Power Down
+	 * 3.3V/12V    _________________________________
+	 *                                              \__________
+	 * PERST#      ______________
+	 *                           \_____________________________
+	 * REFCLK      _________________________
+	 *                                      \__________________
+	 * LINK        ______
+	 *                   \_____________________________________
+	 */
+	if (rk_pcie_check_keep_power_in_suspend(rk_pcie))
+		gpiod_set_value_cansleep(rk_pcie->rst_gpio, 0);
 	phy_power_off(rk_pcie->phy);
 	phy_exit(rk_pcie->phy);
 	clk_bulk_disable_unprepare(rk_pcie->clk_cnt, rk_pcie->clks);
 	reset_control_assert(rk_pcie->rsts);
-	if (rk_pcie_check_keep_power_in_suspend(rk_pcie)) {
+	if (rk_pcie_check_keep_power_in_suspend(rk_pcie))
 		rk_pcie_disable_power(rk_pcie);
-		gpiod_set_value_cansleep(rk_pcie->rst_gpio, 0);
-	}
 
 	return 0;
 }
@@ -1698,7 +1713,7 @@ static int rk_pcie_really_probe(void *p)
 	if (ret && !rk_pcie->slot_pluggable)
 		goto deinit_irq_and_wq;
 
-	if (rk_pcie->slot_pluggable) {
+	if (IS_BUILTIN(CONFIG_PCIE_DW_ROCKCHIP) && rk_pcie->slot_pluggable) {
 		rk_pcie->hp_slot.plat_ops = &rk_pcie_gpio_hp_plat_ops;
 		rk_pcie->hp_slot.np = rk_pcie->pci->dev->of_node;
 		rk_pcie->hp_slot.slot_nr = rk_pcie->pci->pp.bridge->busnr;
@@ -1796,7 +1811,8 @@ static int rk_pcie_remove(struct platform_device *pdev)
 		 * Timeout should not happen as it's longer than regular probe actually.
 		 * But probe maybe fail, so need to double check bridge bus.
 		 */
-		if (!rk_pcie || !rk_pcie->finish_probe || !rk_pcie->pci->pp.bridge->bus) {
+		if (!rk_pcie || !rk_pcie->pci || !rk_pcie->pci->pp.bridge ||
+		    !rk_pcie->pci->pp.bridge->bus) {
 			dev_dbg(dev, "%s return early due to failure in threaded init\n", __func__);
 			return 0;
 		}
@@ -1805,7 +1821,8 @@ static int rk_pcie_remove(struct platform_device *pdev)
 	if (IS_ENABLED(CONFIG_NO_GKI)) dw_pcie_host_deinit(&rk_pcie->pci->pp);
 	rk_pcie_writel_apb(rk_pcie, PCIE_CLIENT_INTR_MASK, 0xffffffff);
 	destroy_workqueue(rk_pcie->hot_rst_wq);
-	pcie_dw_dmatest_unregister(rk_pcie->dma_obj);
+	if (IS_ENABLED(CONFIG_PCIE_DW_ROCKCHIP_RC_DMATEST))
+		pcie_dw_dmatest_unregister(rk_pcie->dma_obj);
 	rockchip_pcie_debugfs_exit(rk_pcie);
 	if (rk_pcie->irq_domain) {
 		int virq, j;
@@ -1818,6 +1835,9 @@ static int rk_pcie_remove(struct platform_device *pdev)
 		irq_set_chained_handler_and_data(rk_pcie->irq, NULL, NULL);
 		irq_domain_remove(rk_pcie->irq_domain);
 	}
+
+	if (IS_BUILTIN(CONFIG_PCIE_DW_ROCKCHIP) && rk_pcie->slot_pluggable)
+		unregister_gpio_hotplug_slot(&rk_pcie->hp_slot);
 
 	device_init_wakeup(dev, false);
 

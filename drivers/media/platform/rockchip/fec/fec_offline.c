@@ -13,6 +13,18 @@ int rkfec_debug;
 module_param_named(debug, rkfec_debug, int, 0644);
 MODULE_PARM_DESC(debug, "Debug level (0-6)");
 
+static int rkfec_stdfps = 30;
+module_param_named(standardfps, rkfec_stdfps, int, 0644);
+MODULE_PARM_DESC(standardfps, "standard fps");
+
+static int rkfec_cache_linesize = 2;
+module_param_named(cache_linesize, rkfec_cache_linesize, int, 0644);
+MODULE_PARM_DESC(cache_linesize, "Cache linesize (0-3)");
+
+static int rkfec_user_debug;
+module_param_named(user_debug, rkfec_user_debug, int, 0644);
+MODULE_PARM_DESC(user_debug, "Debug level (0-6)");
+
 #if IS_LINUX_VERSION_AT_LEAST_6_1
 	#define GET_SG_TABLE(mem_ops, off_buf) mem_ops->cookie(&(off_buf)->vb, (off_buf)->mem)
 #else
@@ -20,6 +32,37 @@ MODULE_PARM_DESC(debug, "Debug level (0-6)");
 #endif
 
 static void buf_del(struct file *file, int fd, bool is_all);
+
+static void rkfec_dvfs(struct rkfec_offline_dev *ofl, int width)
+{
+	int i, ret;
+	struct rkfec_hw_dev *hw = ofl->hw;
+	const struct fec_clk_info *rate_info = NULL;
+	unsigned long target_rate = 0;
+
+	for (i = 0; i < hw->clk_rate_tbl_num; i++) {
+		if (width <= hw->clk_rate_tbl[i].refer_data) {
+			rate_info = &hw->clk_rate_tbl[i];
+			break;
+		}
+	}
+
+	if (!rate_info)
+		rate_info = &hw->clk_rate_tbl[hw->clk_rate_tbl_num - 1];
+
+	target_rate = rate_info->clk_rate * 1000000;
+
+	ret = hw->set_clk(hw->clks[0], target_rate);
+	if (ret < 0)
+		v4l2_err(&ofl->v4l2_dev, "failed to set aclk rate: %d\n", ret);
+
+	ret = hw->set_clk(hw->clks[2], target_rate);
+	if (ret < 0)
+		v4l2_err(&ofl->v4l2_dev, "failed to set core clk rate: %d\n", ret);
+
+	v4l2_dbg(4, rkfec_debug, &ofl->v4l2_dev, "set clk rate: %ld\n",
+		 target_rate);
+}
 
 #if IS_LINUX_VERSION_AT_LEAST_6_1
 static void init_vb2(struct rkfec_offline_dev *ofl,
@@ -59,7 +102,7 @@ static int buf_alloc(struct file *file, struct rkfec_buf *info)
 		return -ENOMEM;
 #if IS_LINUX_VERSION_AT_LEAST_6_1
 	init_vb2(ofl, buf);
-	mem = ops->alloc(&buf->vb, hw->dev, info->size);
+	mem = ops->alloc(&buf->vb, hw->dev, size);
 #else
 	mem = ops->alloc(hw->dev, DMA_ATTR_NO_KERNEL_MAPPING, size,
 			 DMA_BIDIRECTIONAL, GFP_KERNEL | GFP_DMA32);
@@ -98,7 +141,7 @@ static int buf_alloc(struct file *file, struct rkfec_buf *info)
 	list_add_tail(&buf->list, &ofl->list);
 	mutex_unlock(&hw->dev_lock);
 	v4l2_dbg(1, rkfec_debug, &ofl->v4l2_dev, "%s file:%p, fd:%d dbuf:%p size %d\n",
-		 __func__, file, fd, dbuf, info->size);
+		 __func__, file, fd, dbuf, size);
 	return 0;
 
 err_dmabuf_fd:
@@ -234,8 +277,13 @@ static int fec_running(struct file *file, struct rkfec_in_out *buf)
 	u32 val;
 	u32 in_w = buf->in_width, in_h = buf->in_height;
 	u32 out_w = buf->out_width, out_h = buf->out_height;
+	/* Calculate virtual width in bytes */
 	u32 in_stride, out_stride_y, out_stride_uv;
+	/* Calculate uv offset in bytes */
 	u32 in_uv_offset, out_uv_offset;
+	/* Calculate byte offset based on pixel offset */
+	u32 in_y_start = 0, in_uv_start = 0, out_y_start = 0, out_uv_start = 0;
+	u32 y_base, c_base;
 	void __iomem *base = ofl->hw->base_addr;
 	int ret = -EINVAL;
 	ktime_t t = 0;
@@ -250,8 +298,25 @@ static int fec_running(struct file *file, struct rkfec_in_out *buf)
 		 buf->out_fourcc, buf->out_fourcc >> 8,
 		 buf->out_fourcc >> 16, buf->out_fourcc >> 24);
 
+	v4l2_dbg(3, rkfec_debug, &ofl->v4l2_dev,
+		 "in: stride %d, offset %d, out: stride %d, offset %d\n",
+		 buf->buf_cfg.in_stride, buf->buf_cfg.in_offs,
+		 buf->buf_cfg.out_stride, buf->buf_cfg.out_offs);
 
-	//clk tosee
+	if (hw->fec_ver == RKFEC_V20) {
+		if (hw->soft_reset)
+			hw->soft_reset(hw);
+		else
+			dev_warn(hw->dev, "soft_reset not implemented\n");
+	}
+
+	if (hw->set_clk)
+		rkfec_dvfs(ofl, in_w);
+
+	ofl->prev_frame.fs_seq = ofl->curr_frame.fs_seq;
+	ofl->prev_frame.fs_timestamp = ofl->curr_frame.fs_timestamp;
+	ofl->curr_frame.fs_seq++;
+	ofl->curr_frame.fs_timestamp = ktime_get_ns();
 
 	init_completion(&ofl->cmpl);
 
@@ -259,14 +324,18 @@ static int fec_running(struct file *file, struct rkfec_in_out *buf)
 	case V4L2_PIX_FMT_NV12:
 		in_fmt = SW_FEC_RD_FMT(1);
 		rd_mode = SW_FEC_RD_MODE(0);
-		in_stride = (buf->buf_cfg.in_stride + 15) / 16 * 16;
+		in_stride = ALIGN(buf->buf_cfg.in_stride, 16);
 		in_uv_offset = in_stride * in_h;
+		in_y_start = buf->buf_cfg.in_offs;
+		in_uv_start = in_y_start;
 		break;
 	case V4L2_PIX_FMT_TILE420:
 		in_fmt = SW_FEC_RD_FMT(0);
 		rd_mode = SW_FEC_RD_MODE(1);
-		in_stride = (buf->buf_cfg.in_stride * 6 + 15) / 16 * 16;
+		in_stride = ALIGN(buf->buf_cfg.in_stride * 6, 16);
 		in_uv_offset = in_stride * in_h;
+		in_y_start = buf->buf_cfg.in_offs * 6;
+		in_uv_start = in_y_start;
 		break;
 	default:
 		v4l2_err(&ofl->v4l2_dev,
@@ -280,16 +349,20 @@ static int fec_running(struct file *file, struct rkfec_in_out *buf)
 	case V4L2_PIX_FMT_NV12:
 		out_fmt = SW_FEC_WR_FMT(1);
 		wr_mode = SW_FEC_WR_MODE(0);
-		out_stride_y = (buf->buf_cfg.out_stride + 15) / 16 * 16;
+		out_stride_y = ALIGN(buf->buf_cfg.out_stride, 16);
 		out_stride_uv = out_stride_y;
 		out_uv_offset = out_stride_y * out_h;
+		out_y_start = buf->buf_cfg.out_offs;
+		out_uv_start = out_y_start;
 		break;
 	case V4L2_PIX_FMT_TILE420:
 		out_fmt = SW_FEC_WR_FMT(0);
 		wr_mode = SW_FEC_WR_MODE(1);
-		out_stride_y = (buf->buf_cfg.out_stride * 6 + 15) / 16 * 16;
+		out_stride_y = ALIGN(buf->buf_cfg.out_stride * 6, 16);
 		out_stride_uv = out_stride_y;
 		out_uv_offset = out_stride_y * out_h;
+		out_y_start = buf->buf_cfg.out_offs * 6;
+		out_uv_start = out_y_start;
 		break;
 	case V4L2_PIX_FMT_FBC0:
 		out_fmt = SW_FEC_WR_FMT(0);
@@ -298,13 +371,24 @@ static int fec_running(struct file *file, struct rkfec_in_out *buf)
 		out_stride_uv = (buf->buf_cfg.out_stride + 63) / 64 * 16;
 		// Head stride is c channel
 		out_uv_offset = out_stride_uv * out_h / 4;
+		out_y_start = buf->buf_cfg.out_offs / 64 * 384;
+		out_uv_start = buf->buf_cfg.out_offs / 64 * 16;
 		break;
 	case V4L2_PIX_FMT_QUAD:
 		out_fmt = SW_FEC_WR_FMT(0);
 		wr_mode = SW_FEC_WR_MODE(3);
-		out_stride_y = (buf->buf_cfg.out_stride * 3 + 15) / 16 * 16;
+		out_stride_y = ALIGN(buf->buf_cfg.out_stride * 3, 16);
 		out_stride_uv = out_stride_y;
 		out_uv_offset = out_stride_y * out_h;
+
+		if (buf->buf_cfg.out_offs > 0) {
+			v4l2_err(&ofl->v4l2_dev,
+				 "Offset is not supported in %c%c%c%c\n",
+				 buf->out_fourcc, buf->out_fourcc >> 8,
+				 buf->out_fourcc >> 16, buf->out_fourcc >> 24);
+			out_y_start = 0;
+			out_uv_start = 0;
+		}
 		break;
 	default:
 		v4l2_err(&ofl->v4l2_dev, "no support out format:%c%c%c%c\n",
@@ -321,11 +405,10 @@ static int fec_running(struct file *file, struct rkfec_in_out *buf)
 	sg_talbe = GET_SG_TABLE(mem_ops, off_buf);
 	if (!sg_talbe)
 		goto free_buf;
-	val = sg_dma_address(sg_talbe->sgl);
-	val += buf->buf_cfg.in_offs;
-	writel(val, base + RKFEC_RD_Y_BASE);
-	val += in_uv_offset;
-	writel(val, base + RKFEC_RD_C_BASE);
+	y_base = sg_dma_address(sg_talbe->sgl);
+	c_base = y_base + in_uv_offset;
+	writel(y_base + in_y_start, base + RKFEC_RD_Y_BASE);
+	writel(c_base + in_uv_start, base + RKFEC_RD_C_BASE);
 
 	/* output picture buf */
 	off_buf = buf_add(file, buf->buf_cfg.out_pic_fd, buf->buf_cfg.out_size);
@@ -335,18 +418,21 @@ static int fec_running(struct file *file, struct rkfec_in_out *buf)
 	sg_talbe = GET_SG_TABLE(mem_ops, off_buf);
 	if (!sg_talbe)
 		goto free_buf;
-	val = sg_dma_address(sg_talbe->sgl);
 	if (buf->out_fourcc == V4L2_PIX_FMT_FBC0) {
-		val += buf->buf_cfg.out_offs;
-		writel(val, base + RKFEC_WR_C_BASE);
-		val += out_uv_offset;
-		writel(val, base + RKFEC_WR_Y_BASE);
+		c_base = sg_dma_address(sg_talbe->sgl);
+		y_base = c_base + out_uv_offset;
+
+		if (buf->buf_cfg.out_offs > 0)
+			writel((out_uv_offset + out_y_start)  << 4,
+			       base + RKFEC_WR_FBCE_HEAD_OFFSET);
+		else
+			writel(out_uv_offset << 4, base + RKFEC_WR_FBCE_HEAD_OFFSET);
 	} else {
-		val += buf->buf_cfg.out_offs;
-		writel(val, base + RKFEC_WR_Y_BASE);
-		val += out_uv_offset;
-		writel(val, base + RKFEC_WR_C_BASE);
+		y_base = sg_dma_address(sg_talbe->sgl);
+		c_base = y_base + out_uv_offset;
 	}
+	writel(y_base + out_y_start, base + RKFEC_WR_Y_BASE);
+	writel(c_base + out_uv_start, base + RKFEC_WR_C_BASE);
 
 	/* lut buf */
 	off_buf = buf_add(file, buf->buf_cfg.lut_fd, buf->buf_cfg.lut_size);
@@ -379,7 +465,7 @@ static int fec_running(struct file *file, struct rkfec_in_out *buf)
 	//new  bg val
 	val = SW_BG_Y_VALUE(buf->bg_val.bg_y) |
 	      SW_BG_U_VALUE(buf->bg_val.bg_u) |
-	      SW_BG_Y_VALUE(buf->bg_val.bg_v);
+	      SW_BG_V_VALUE(buf->bg_val.bg_v);
 	writel(val, base + RKFEC_BG_VALUE);
 
 	//core_ctrl
@@ -393,8 +479,10 @@ static int fec_running(struct file *file, struct rkfec_in_out *buf)
 
 	writel(0, base + RKFEC_CLK_DIS);
 
+	// cache
 	writel(0x1c, base + RKFEC_CACHE_MAX_READS);
-	writel(0x27, base + RKFEC_CACHE_CTRL);
+	val = SW_CACHE_LINESIZE(rkfec_cache_linesize) | 0x7;
+	writel(val, base + RKFEC_CACHE_CTRL);
 
 	//update
 	writel(SYS_FEC_FORCE_UPD, base + RKFEC_UPD);
@@ -409,17 +497,16 @@ static int fec_running(struct file *file, struct rkfec_in_out *buf)
 	ofl->in_fmt.width = in_w;
 	ofl->in_fmt.height = in_h;
 	ofl->in_fmt.pixelformat = buf->in_fourcc;
-	ofl->in_fmt.bytesperline = buf->buf_cfg.in_stride;
+	ofl->in_fmt.bytesperline = in_stride;
 	ofl->in_fmt.sizeimage = buf->buf_cfg.in_size;
+	ofl->in_fmt.offset = buf->buf_cfg.in_offs;
 
 	ofl->out_fmt.width = out_w;
 	ofl->out_fmt.height = out_h;
 	ofl->out_fmt.pixelformat = buf->out_fourcc;
-	ofl->out_fmt.bytesperline = buf->buf_cfg.out_stride;
+	ofl->out_fmt.bytesperline = out_stride_y;
 	ofl->out_fmt.sizeimage = buf->buf_cfg.out_size;
-
-	ofl->curr_frame.fs_seq++;
-	ofl->curr_frame.fs_timestamp = ktime_get_ns();
+	ofl->out_fmt.offset = buf->buf_cfg.out_offs;
 
 	ret = wait_for_completion_timeout(&ofl->cmpl, msecs_to_jiffies(300));
 	if (!ret) {
@@ -433,20 +520,35 @@ static int fec_running(struct file *file, struct rkfec_in_out *buf)
 	v4l2_dbg(3, rkfec_debug, &ofl->v4l2_dev,
 		 "%s exit ret:%d, time:%lldus\n", __func__, ret, us);
 
+	if (rkfec_debug >= 4) {
+		pr_cont("FEC_0x200:\n");
+		print_hex_dump(KERN_CONT, "", DUMP_PREFIX_OFFSET, 16, 4,
+			       base + RKFEC_STRT, 0xc0, false);
+
+		pr_cont("FEC_CACHE:\n");
+		print_hex_dump(KERN_CONT, "", DUMP_PREFIX_OFFSET, 16, 4,
+			       base + RKFEC_CACHE_STATUS, 0x28, false);
+
+		pr_cont("FEC_MMU:\n");
+		print_hex_dump(KERN_CONT, "", DUMP_PREFIX_OFFSET, 16, 4,
+			       base + RKFEC_MMU_DTE_ADDR, 0x2c, false);
+	}
+
 	ofl->debug.interval = us;
+	if (ofl->debug.interval * rkfec_stdfps > USEC_PER_SEC)
+		ofl->debug.frame_timeout_cnt++;
 
 	ofl->state = RKFEC_FRAME_END;
 	if (!ret) {
-		ofl->curr_frame.fe_seq++;
-		ofl->curr_frame.fe_timestamp = ktime_get_ns();
 		if (ofl->curr_frame.fe_seq > ofl->prev_frame.fe_seq &&
 		    ofl->curr_frame.fe_seq - ofl->prev_frame.fe_seq > 1)
 			ofl->debug.frameloss += ofl->curr_frame.fe_seq - ofl->prev_frame.fe_seq - 1;
-	} else {
-		ofl->debug.frameloss++;
-	}
 
-	ofl->prev_frame = ofl->curr_frame;
+		ofl->prev_frame.fe_seq = ofl->curr_frame.fe_seq;
+		ofl->prev_frame.fe_timestamp = ofl->curr_frame.fe_timestamp;
+		ofl->curr_frame.fe_seq++;
+		ofl->curr_frame.fe_timestamp = ktime_get_ns();
+	}
 
 	return ret;
 
@@ -466,6 +568,12 @@ static long rkfec_ofl_ioctl(struct file *file, void *fh,
 	long ret = 0;
 
 	ofl->pm_need_wait = true;
+
+	v4l2_dbg(4, rkfec_debug, &ofl->v4l2_dev, "%s cmd:%d", __func__, cmd);
+
+	if (mutex_lock_interruptible(&ofl->ioctl_lock)) {
+		return -ERESTARTSYS;
+	}
 
 	if (!arg) {
 		ret =  -EINVAL;
@@ -497,6 +605,7 @@ out:
 		complete(&ofl->pm_cmpl);
 
 	ofl->pm_need_wait = false;
+	mutex_unlock(&ofl->ioctl_lock);
 	return ret;
 }
 
@@ -583,7 +692,7 @@ int rkfec_register_offline(struct rkfec_hw_dev *hw)
 	if (ret)
 		return ret;
 
-	mutex_init(&ofl->apilock);
+	mutex_init(&ofl->ioctl_lock);
 	ofl->vfd = offline_videodev;
 	vfd = &ofl->vfd;
 	vfd->device_caps = V4L2_CAP_STREAMING;
@@ -607,7 +716,7 @@ int rkfec_register_offline(struct rkfec_hw_dev *hw)
 	v4l2_info(&ofl->v4l2_dev, "%s success\n", __func__);
 	return 0;
 unreg_v4l2:
-	mutex_destroy(&ofl->apilock);
+	mutex_destroy(&ofl->ioctl_lock);
 	v4l2_device_unregister(v4l2_dev);
 	return ret;
 }
@@ -617,7 +726,7 @@ void rkfec_unregister_offline(struct rkfec_hw_dev *hw)
 	struct rkfec_offline_dev *ofl = &hw->ofl_dev;
 
 	rkfec_offline_proc_cleanup(&hw->ofl_dev);
-	mutex_destroy(&ofl->apilock);
+	mutex_destroy(&ofl->ioctl_lock);
 	video_unregister_device(&ofl->vfd);
 	v4l2_device_unregister(&ofl->v4l2_dev);
 }

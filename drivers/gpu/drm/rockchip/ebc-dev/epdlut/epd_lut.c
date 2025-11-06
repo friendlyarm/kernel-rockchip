@@ -16,7 +16,7 @@
 #include "../ebc_dev.h"
 #include "epd_lut.h"
 
-static int (*lut_get)(struct epd_lut_data *, enum epd_lut_type, int, int, int);
+static int (*lut_get)(struct epd_lut_data *, enum epd_lut_type, int, int, int, int);
 static int (*lut_get_original)(struct epd_lut_data *, enum epd_lut_type, int, int);
 
 int epd_lut_from_mem_init(void *waveform)
@@ -69,9 +69,18 @@ const char *epd_lut_get_wf_version(void)
 	return NULL;
 }
 
-int epd_lut_get(struct epd_lut_data *output, enum epd_lut_type lut_type, int temperature, int pic, int regal_pix)
+int epd_lut_get_wf_bit(void)
 {
-	return lut_get(output, lut_type, temperature, pic, regal_pix);
+	if (rkf_wf_get_wf_bit())
+		return rkf_wf_get_wf_bit();
+	if (pvi_wf_get_wf_bit())
+		return pvi_wf_get_wf_bit();
+	return 0;
+}
+
+int epd_lut_get(struct epd_lut_data *output, enum epd_lut_type lut_type, int temperature, int pic, int wf_fix, int regal_pix)
+{
+	return lut_get(output, lut_type, temperature, pic, wf_fix, regal_pix);
 }
 
 int epd_lut_get_original(struct epd_lut_data *output, enum epd_lut_type lut_type, int temperature, int pic)
@@ -86,4 +95,25 @@ int epd_lut_get_original(struct epd_lut_data *output, enum epd_lut_type lut_type
 int epd_overlay_lut(void)
 {
 	return WF_TYPE_GRAY2;
+}
+
+//return value
+//0 : no modify  1: modify by customer
+int epd_gray2_last_repair(u8 *wf_table)
+{
+	return 0;
+}
+
+//return value
+//0 : no modify  1: modify by customer
+int epd_overlay_gray2_repair(u8 *wf_table, int frame_num)
+{
+	return 0;
+}
+
+//return value
+//0 : no modify  1: modify by customer
+int epd_regal_repair(u8 *wf_table, int frame_num)
+{
+	return 0;
 }

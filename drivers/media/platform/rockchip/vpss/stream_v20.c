@@ -87,7 +87,7 @@ static const struct capture_fmt scl0_fmts[] = {
 		.output_fmt = RKVPSS_MI_CHN_WR_OUTPUT_YUV422,
 	}, {
 		.fourcc = V4L2_PIX_FMT_TILE420,
-		.fmt_type = FMT_YUV,
+		.fmt_type = FMT_TILE,
 		.bpp = { 24 },
 		.cplanes = 1,
 		.mplanes = 1,
@@ -96,13 +96,29 @@ static const struct capture_fmt scl0_fmts[] = {
 		.output_fmt = RKVPSS_MI_CHN_WR_OUTPUT_YUV420,
 	}, {
 		.fourcc = V4L2_PIX_FMT_TILE422,
-		.fmt_type = FMT_YUV,
+		.fmt_type = FMT_TILE,
 		.bpp = { 32 },
 		.cplanes = 1,
 		.mplanes = 1,
 		.swap = 0,
 		.wr_fmt = 0,
 		.output_fmt = RKVPSS_MI_CHN_WR_OUTPUT_YUV422,
+	}, {
+		.fourcc = V4L2_PIX_FMT_FBC2,
+		.fmt_type = FMT_FBC,
+		.bpp = { 8, 16 },
+		.cplanes = 2,
+		.mplanes = 1,
+		.wr_fmt = RKVPSS_MI_CHN_WR_42XSP,
+		.output_fmt = RKVPSS_MI_CHN_WR_OUTPUT_YUV422,
+	}, {
+		.fourcc = V4L2_PIX_FMT_FBC0,
+		.fmt_type = FMT_FBC,
+		.bpp = { 8, 16 },
+		.cplanes = 2,
+		.mplanes = 1,
+		.wr_fmt = RKVPSS_MI_CHN_WR_42XSP,
+		.output_fmt = RKVPSS_MI_CHN_WR_OUTPUT_YUV420,
 	}
 };
 
@@ -242,6 +258,22 @@ static const struct capture_fmt scl1_fmts[] = {
 		   .swap = 0,
 		   .wr_fmt = 0,
 		   .output_fmt = RKVPSS_MI_CHN_WR_OUTPUT_YUV422,
+	}, {
+		.fourcc = V4L2_PIX_FMT_FBC2,
+		.fmt_type = FMT_FBC,
+		.bpp = { 8, 16 },
+		.cplanes = 2,
+		.mplanes = 1,
+		.wr_fmt = RKVPSS_MI_CHN_WR_42XSP,
+		.output_fmt = RKVPSS_MI_CHN_WR_OUTPUT_YUV422,
+	}, {
+		.fourcc = V4L2_PIX_FMT_FBC0,
+		.fmt_type = FMT_FBC,
+		.bpp = { 8, 16 },
+		.cplanes = 2,
+		.mplanes = 1,
+		.wr_fmt = RKVPSS_MI_CHN_WR_42XSP,
+		.output_fmt = RKVPSS_MI_CHN_WR_OUTPUT_YUV420,
 	}
 };
 
@@ -714,9 +746,9 @@ static struct stream_config scl5_config = {
 		.uv_offs_cnt = RKVPSS2X_MI_CHN5_WR_CB_OFFS_CNT,
 		.y_pic_width = RKVPSS2X_MI_CHN5_WR_Y_PIC_WIDTH,
 		.y_pic_size = RKVPSS2X_MI_CHN5_WR_Y_PIC_SIZE,
-		.ctrl_shd = RKVPSS2X_MI_CHN4_WR_CTRL_SHD,
-		.y_shd = RKVPSS2X_MI_CHN4_WR_Y_BASE_SHD,
-		.uv_shd = RKVPSS2X_MI_CHN4_WR_CB_BASE_SHD,
+		.ctrl_shd = RKVPSS2X_MI_CHN5_WR_CTRL_SHD,
+		.y_shd = RKVPSS2X_MI_CHN5_WR_Y_BASE_SHD,
+		.uv_shd = RKVPSS2X_MI_CHN5_WR_CB_BASE_SHD,
 	},
 };
 
@@ -759,17 +791,17 @@ static void calc_unite_scl_params(struct rkvpss_stream *stream)
 
 	if (stream->id == 0 && stream->crop.width != stream->out_fmt.width) {
 		right_y_crop_total = stream->crop.width / 2 +
-				     RKMOUDLE_UNITE_EXTEND_PIXEL -
+				     stream->dev->unite_extend_pixel -
 				     right_scl_need_size_y - 3;
 		right_c_crop_total = stream->crop.width / 2 +
-				     RKMOUDLE_UNITE_EXTEND_PIXEL -
+				     stream->dev->unite_extend_pixel -
 				     right_scl_need_size_c - 6;
 	} else {
 		right_y_crop_total = stream->crop.width / 2 +
-				     RKMOUDLE_UNITE_EXTEND_PIXEL -
+				     stream->dev->unite_extend_pixel -
 				     right_scl_need_size_y;
 		right_c_crop_total = stream->crop.width / 2 +
-				     RKMOUDLE_UNITE_EXTEND_PIXEL -
+				     stream->dev->unite_extend_pixel -
 				     right_scl_need_size_c;
 	}
 
@@ -822,11 +854,13 @@ static void stream_frame_start(struct rkvpss_stream *stream, u32 irq)
 		rkvpss_stream_scale(stream, true, !irq);
 		rkvpss_stream_crop(stream, true, !irq);
 	}
-	if (!irq && !stream->curr_buf &&
-	    !stream->dev->hw_dev->is_single)
+	if (stream->is_pause)
 		stream->ops->update_mi(stream);
 
-	if (dev->stream_vdev.wrap_line) {
+	if (dev->stream_vdev.wrap_line && stream->id == RKVPSS_OUTPUT_CH0) {
+		/* vpss can be holded by enc if isp input offline */
+		if (!irq)
+			rkvpss_unite_set_bits(dev, RKVPSS_VPSS_CTRL, 0, RKVPSS_VPSS2ENC_PIPE_EN);
 		rkvpss_rockit_frame_start(dev);
 		rkvpss_dvbm_event(dev, ROCKIT_DVBM_START);
 	}
@@ -853,7 +887,7 @@ static void scl_force_update(struct rkvpss_stream *stream)
 		val = RKVPSS2X_MI_CHN4_FORCE_UPD;
 		break;
 	case RKVPSS_OUTPUT_CH5:
-		val = RKVPSS2X_MI_CHN4_FORCE_UPD;
+		val = RKVPSS2X_MI_CHN5_FORCE_UPD;
 		break;
 	default:
 		return;
@@ -865,6 +899,7 @@ static void scl_force_update(struct rkvpss_stream *stream)
 
 static void scl_update_mi(struct rkvpss_stream *stream)
 {
+	struct capture_fmt *fmt = &stream->out_cap_fmt;
 	struct rkvpss_device *dev = stream->dev;
 	struct rkvpss_buffer *buf = NULL;
 	unsigned long lock_flags = 0;
@@ -879,8 +914,15 @@ static void scl_update_mi(struct rkvpss_stream *stream)
 	spin_unlock_irqrestore(&stream->vbq_lock, lock_flags);
 
 	if (buf) {
-		y_base = buf->dma[0];
-		uv_base = buf->dma[1];
+		if (fmt->fmt_type == FMT_FBC) {
+			/* uv for head at buf top */
+			uv_base = buf->dma[0];
+			/* y for payload after head */
+			y_base = buf->dma[1];
+		} else {
+			y_base = buf->dma[0];
+			uv_base = buf->dma[1];
+		}
 		rkvpss_idx_write(dev, stream->config->mi.y_base, y_base, VPSS_UNITE_LEFT);
 		rkvpss_idx_write(dev, stream->config->mi.uv_base, uv_base, VPSS_UNITE_LEFT);
 		if (dev->unite_mode) {
@@ -898,19 +940,21 @@ static void scl_update_mi(struct rkvpss_stream *stream)
 			stream->ops->enable_mi(stream);
 		}
 	} else if (!stream->is_pause) {
-		/* wrap mode don't disable mi */
-		if (stream->id != RKVPSS_OUTPUT_CH0 || !dev->stream_vdev.wrap_line) {
+		/* wrap mode don't disable mi for ch0 */
+		if (!dev->stream_vdev.wrap_line || stream->id != RKVPSS_OUTPUT_CH0) {
 			stream->is_pause = true;
 			stream->ops->disable_mi(stream);
 		}
 	}
 
 	v4l2_dbg(2, rkvpss_debug, &dev->v4l2_dev,
-		 "%s id:%d unite_index:%d Y:0x%x UV:0x%x | Y_SHD:0x%x\n",
-		__func__, stream->id, dev->unite_index,
+		 "%s id:%d idx:%d buf:%p pause:%d Y:%x UV:%x ctrl:%x | SHD(Y:%x ctrl:%x)\n",
+		__func__, stream->id, dev->unite_index, stream->curr_buf, stream->is_pause,
 		rkvpss_idx_read(dev, stream->config->mi.y_base, dev->unite_index),
 		rkvpss_idx_read(dev, stream->config->mi.uv_base, dev->unite_index),
-		rkvpss_hw_read(dev->hw_dev, stream->config->mi.y_shd));
+		rkvpss_idx_read(dev, stream->config->mi.ctrl, dev->unite_index),
+		rkvpss_hw_read(dev->hw_dev, stream->config->mi.y_shd),
+		rkvpss_hw_read(dev->hw_dev, stream->config->mi.ctrl_shd));
 }
 
 static void scl_config_mi(struct rkvpss_stream *stream)
@@ -918,14 +962,19 @@ static void scl_config_mi(struct rkvpss_stream *stream)
 	struct rkvpss_device *dev = stream->dev;
 	struct capture_fmt *fmt = &stream->out_cap_fmt;
 	struct v4l2_pix_format_mplane *out_fmt = &stream->out_fmt;
-	u32 reg, val, mask;
+	u32 reg, val, mask, height = out_fmt->height;
+	u32 width = out_fmt->width;
 
-	v4l2_dbg(4, rkvpss_debug, &dev->v4l2_dev,
-		 "%s stream:%d\n", __func__, stream->id);
-
-	val = out_fmt->plane_fmt[0].bytesperline;
+	if (fmt->fmt_type == FMT_FBC)
+		val = 0;
+	else {
+		/* If 16-aligned, use stride; otherwise set to 0 */
+		if (IS_ALIGNED(out_fmt->plane_fmt[0].bytesperline, 16))
+			val = out_fmt->plane_fmt[0].bytesperline;
+		else
+			val = 0;
+	}
 	reg = stream->config->mi.stride;
-	rkvpss_unite_write(dev, reg, val);
 	rkvpss_unite_write(dev, reg, val);
 
 	switch (fmt->fourcc) {
@@ -942,18 +991,33 @@ static void scl_config_mi(struct rkvpss_stream *stream)
 		break;
 	}
 
-	val = val * out_fmt->height;
+	val = val * height;
 	reg = stream->config->mi.y_pic_size;
 	rkvpss_unite_write(dev, reg, val);
 
-	if (dev->stream_vdev.wrap_line && stream->id == RKVPSS_OUTPUT_CH0)
-		val = out_fmt->plane_fmt[0].bytesperline * dev->stream_vdev.wrap_line;
+	if (dev->stream_vdev.wrap_line && stream->id == RKVPSS_OUTPUT_CH0) {
+		mask = RKVPSS_VPSS2ENC_SEL | RKVPSS2X_SENSOR_ID(7) |
+		       RKVPSS_VPSS2ENC_CNT_SEL;
+		val = RKVPSS_VPSS2ENC_SEL | RKVPSS2X_VPSS2ENC_PATH_EN |
+		      RKVPSS2X_SENSOR_ID(dev->dev_id);
+		rkvpss_unite_set_bits(dev, RKVPSS_VPSS_CTRL, mask, val);
+
+		height = dev->stream_vdev.wrap_line;
+	}
+
+	if (fmt->fmt_type == FMT_FBC)
+		val = out_fmt->plane_fmt[0].sizeimage - stream->fbc_head_size;
 	else
-		val = out_fmt->plane_fmt[0].bytesperline * out_fmt->height;
+		val = out_fmt->plane_fmt[0].bytesperline * height;
 	reg = stream->config->mi.y_size;
 	rkvpss_unite_write(dev, reg, val);
 
-	val = out_fmt->plane_fmt[1].sizeimage;
+	if (dev->stream_vdev.wrap_line && stream->id == RKVPSS_OUTPUT_CH0)
+		val = out_fmt->plane_fmt[0].bytesperline * height / 2;
+	else if (fmt->fmt_type == FMT_FBC)
+		val = stream->fbc_head_size;
+	else
+		val = out_fmt->plane_fmt[1].sizeimage;
 	reg = stream->config->mi.uv_size;
 	rkvpss_unite_write(dev, reg, val);
 
@@ -984,6 +1048,15 @@ static void scl_config_mi(struct rkvpss_stream *stream)
 		mask = RKVPSS_MI_WR_TILE_SEL(3);
 		val = RKVPSS_MI_WR_TILE_SEL(stream->id + 1);
 		rkvpss_hw_set_bits(dev->hw_dev, RKVPSS_MI_WR_CTRL, mask, val);
+		break;
+	case V4L2_PIX_FMT_FBC0:
+	case V4L2_PIX_FMT_FBC2:
+		mask = RKVPSS2X_SW_MI_WR_FBCE_SEL(3);
+		val = RKVPSS2X_SW_MI_WR_FBCE_SEL(stream->id + 1);
+		rkvpss_unite_set_bits(dev, RKVPSS2X_MI_WR_FBCE_CTRL, mask, val);
+		val = RKVPSS2X_SW_WR_FBCE_SIZE(width, height);
+		rkvpss_unite_write(dev, RKVPSS2X_MI_WR_FBCE_SIZE, val);
+		rkvpss_unite_write(dev, RKVPSS2X_MI_WR_FBCE_OFFSET, stream->fbc_head_size);
 		break;
 	default:
 		break;
@@ -1033,8 +1106,10 @@ static void scl_enable_mi(struct rkvpss_stream *stream)
 	val = RKVPSS_ONLINE2_CHN_FORCE_UPD | RKVPSS_CFG_GEN_UPD;
 	rkvpss_unite_write(dev, RKVPSS_VPSS_UPDATE, val);
 	v4l2_dbg(2, rkvpss_debug, &dev->v4l2_dev,
-		 "%s id:%d\n", __func__,
-		 stream->id);
+		 "%s id:%d 0x%x:0x%x 0x%x:0x%x\n",
+		 __func__, stream->id,
+		 RKVPSS_VPSS_ONLINE, rkvpss_idx_read(dev, RKVPSS_VPSS_ONLINE, dev->unite_index),
+		 RKVPSS_VPSS_ONLINE_SHD, rkvpss_hw_read(dev->hw_dev, RKVPSS_VPSS_ONLINE_SHD));
 }
 
 static void scl_disable_mi(struct rkvpss_stream *stream)
@@ -1059,7 +1134,7 @@ static void scl_disable_mi(struct rkvpss_stream *stream)
 		val = RKVPSS2X_ISP2VPSS_CHN4_SEL(3);
 		break;
 	case RKVPSS_OUTPUT_CH5:
-		val = RKVPSS2X_ISP2VPSS_CHN4_SEL(3);
+		val = RKVPSS2X_ISP2VPSS_CHN5_SEL(3);
 		break;
 	default:
 		return;
@@ -1069,8 +1144,10 @@ static void scl_disable_mi(struct rkvpss_stream *stream)
 	val = RKVPSS_ONLINE2_CHN_FORCE_UPD | RKVPSS_CFG_GEN_UPD;
 	rkvpss_unite_write(dev, RKVPSS_VPSS_UPDATE, val);
 	v4l2_dbg(2, rkvpss_debug, &dev->v4l2_dev,
-		 "%s id:%d\n", __func__,
-		 stream->id);
+		 "%s id:%d 0x%x:0x%x 0x%x:0x%x\n",
+		 __func__, stream->id,
+		 RKVPSS_VPSS_ONLINE, rkvpss_idx_read(dev, RKVPSS_VPSS_ONLINE, dev->unite_index),
+		 RKVPSS_VPSS_ONLINE_SHD, rkvpss_hw_read(dev->hw_dev, RKVPSS_VPSS_ONLINE_SHD));
 }
 
 static struct streams_ops scl_stream_ops = {
@@ -1154,14 +1231,14 @@ static void rkvpss_frame_end(struct rkvpss_stream *stream)
 	struct rkvpss_buffer *buf = NULL;
 	unsigned long lock_flags = 0;
 
-	v4l2_dbg(3, rkvpss_debug, &dev->v4l2_dev,
-		 "%s stream:%d\n", __func__, stream->id);
 	spin_lock_irqsave(&stream->vbq_lock, lock_flags);
 	if (stream->curr_buf) {
-		buf = stream->curr_buf;
-	/* wrap mode use one buffer */
-		if (stream->curr_buf->vb.vb2_buf.memory || !dev->stream_vdev.wrap_line)
+		/* rockit wrap mode use one buffer for ch0 */
+		if (stream->curr_buf->vb.vb2_buf.memory ||
+		    !dev->stream_vdev.wrap_line || stream->id != RKVPSS_OUTPUT_CH0) {
+			buf = stream->curr_buf;
 			stream->curr_buf = NULL;
+		}
 	}
 	spin_unlock_irqrestore(&stream->vbq_lock, lock_flags);
 
@@ -1171,12 +1248,21 @@ static void rkvpss_frame_end(struct rkvpss_stream *stream)
 		u64 ns = sdev->frame_timestamp;
 		int i;
 
+		if (stream->skip_frame) {
+			spin_lock_irqsave(&stream->vbq_lock, lock_flags);
+			list_add_tail(&buf->queue, &stream->buf_queue);
+			spin_unlock_irqrestore(&stream->vbq_lock, lock_flags);
+			stream->skip_frame--;
+			goto end;
+		}
+
 		for (i = 0; i < fmt->mplanes; i++) {
 			u32 payload_size = stream->out_fmt.plane_fmt[i].sizeimage;
 
 			vb2_set_plane_payload(vb2_buf, i, payload_size);
 
-			if (stream->is_attach_info && i == fmt->mplanes - 1) {
+			if (stream->is_attach_info &&
+			    vb2_buf->memory && i == fmt->mplanes - 1) {
 				struct rkvpss_frame_info *dst_info = buf->vaddr[i] + payload_size;
 				struct rkisp_vpss_frame_info *src_info = &dev->frame_info;
 
@@ -1202,7 +1288,7 @@ static void rkvpss_frame_end(struct rkvpss_stream *stream)
 			rkvpss_dvbm_event(dev, ROCKIT_DVBM_END);
 		}
 	}
-
+end:
 	rkvpss_stream_mf(stream);
 	stream->ops->update_mi(stream);
 }
@@ -1229,7 +1315,10 @@ static int rkvpss_queue_setup(struct vb2_queue *queue,
 		const struct v4l2_plane_pix_format *plane_fmt;
 
 		plane_fmt = &pixm->plane_fmt[i];
-		sizes[i] = plane_fmt->sizeimage / pixm->height * ALIGN(pixm->height, 16);
+		if (cap_fmt->fmt_type == FMT_FBC)
+			sizes[i] = plane_fmt->sizeimage;
+		else
+			sizes[i] = plane_fmt->sizeimage / pixm->height * ALIGN(pixm->height, 16);
 
 		if (stream->is_attach_info && i == cap_fmt->mplanes - 1)
 			sizes[i] += sizeof(struct rkvpss_frame_info);
@@ -1267,9 +1356,13 @@ static void rkvpss_buf_queue(struct vb2_buffer *vb)
 	 * NOTE: plane_fmt[0].sizeimage is total size of all planes for single
 	 * memory plane formats, so calculate the size explicitly.
 	 */
-	if (cap_fmt->mplanes == 1) {
+	if (cap_fmt->fmt_type == FMT_FBC) {
+		vpssbuf->dma[1] = vpssbuf->dma[0] + stream->fbc_head_size;
+	} else if (cap_fmt->mplanes == 1) {
 		for (i = 0; i < cap_fmt->cplanes - 1; i++) {
 			height = pixm->height;
+			if (dev->stream_vdev.wrap_line && stream->id == RKVPSS_OUTPUT_CH0)
+				height = dev->stream_vdev.wrap_line;
 			size = (i == 0) ?
 				pixm->plane_fmt[i].bytesperline * height :
 				pixm->plane_fmt[i].sizeimage;
@@ -1284,9 +1377,6 @@ static void rkvpss_buf_queue(struct vb2_buffer *vb)
 	spin_lock_irqsave(&stream->vbq_lock, lock_flags);
 	list_add_tail(&vpssbuf->queue, &stream->buf_queue);
 	spin_unlock_irqrestore(&stream->vbq_lock, lock_flags);
-	if (dev->hw_dev->is_single &&
-	    stream->streaming && !stream->curr_buf)
-		stream->ops->update_mi(stream);
 }
 
 static void destroy_buf_queue(struct rkvpss_stream *stream,
@@ -1378,7 +1468,7 @@ static int rkvpss_stream_crop_ch4_5(struct rkvpss_stream *stream, bool on, bool 
 			if (crop->width == stream->out_fmt.width)
 				h_size =  crop->width / 2;
 			else
-				h_size = crop->width / 2 + RKMOUDLE_UNITE_EXTEND_PIXEL;
+				h_size = crop->width / 2 + dev->unite_extend_pixel;
 
 			v_size = crop->height;
 			rkvpss_idx_write(dev, reg_ch4_5_size,
@@ -1394,7 +1484,7 @@ static int rkvpss_stream_crop_ch4_5(struct rkvpss_stream *stream, bool on, bool 
 			rkvpss_idx_set_bits(dev, reg_ctrl, 0, val, VPSS_UNITE_RIGHT);
 			h_offs = stream->unite_params.quad_crop_w;
 			v_offs = crop->top;
-			h_size = crop->width / 2 + RKMOUDLE_UNITE_EXTEND_PIXEL -
+			h_size = crop->width / 2 + dev->unite_extend_pixel -
 				 stream->unite_params.quad_crop_w;
 			v_size = crop->height;
 			rkvpss_idx_write(dev, reg_ch4_5_offs,
@@ -1477,7 +1567,7 @@ static int rkvpss_stream_crop(struct rkvpss_stream *stream, bool on, bool sync)
 						 VPSS_UNITE_LEFT);
 			else
 				rkvpss_idx_write(dev, reg_h_size, crop->width / 2 +
-						 RKMOUDLE_UNITE_EXTEND_PIXEL, VPSS_UNITE_LEFT);
+						 dev->unite_extend_pixel, VPSS_UNITE_LEFT);
 			rkvpss_idx_write(dev, reg_v_size, crop->height, VPSS_UNITE_LEFT);
 			v4l2_dbg(4, rkvpss_debug, &dev->v4l2_dev,
 				 "left crop left:%d top:%d w:%d h:%d\n",
@@ -1492,8 +1582,8 @@ static int rkvpss_stream_crop(struct rkvpss_stream *stream, bool on, bool sync)
 					 VPSS_UNITE_RIGHT);
 			rkvpss_idx_write(dev, reg_v_offs, crop->top, VPSS_UNITE_RIGHT);
 			rkvpss_idx_write(dev, reg_h_size, crop->width / 2 +
-				     RKMOUDLE_UNITE_EXTEND_PIXEL -
-				     stream->unite_params.quad_crop_w, VPSS_UNITE_RIGHT);
+					 dev->unite_extend_pixel -
+					 stream->unite_params.quad_crop_w, VPSS_UNITE_RIGHT);
 			rkvpss_idx_write(dev, reg_v_size, crop->height, VPSS_UNITE_RIGHT);
 			v4l2_dbg(4, rkvpss_debug, &dev->v4l2_dev,
 				 "right crop left:%d top:%d w:%d h:%d\n",
@@ -1527,14 +1617,11 @@ static void average_scale_down(struct rkvpss_stream *stream, bool on, bool sync)
 
 	/*config scl clk gate*/
 	switch (stream->id) {
-	case RKVPSS_OUTPUT_CH1:
-		clk_mask = RKVPSS_SCL1_CKG_DIS;
+	case RKVPSS_OUTPUT_CH0:
+		clk_mask = RKVPSS_SCL0_CKG_DIS;
 		break;
 	case RKVPSS_OUTPUT_CH2:
 		clk_mask = RKVPSS_SCL2_CKG_DIS;
-		break;
-	case RKVPSS_OUTPUT_CH3:
-		clk_mask = RKVPSS_SCL3_CKG_DIS;
 		break;
 	default:
 		return;
@@ -1574,11 +1661,11 @@ static void average_scale_down(struct rkvpss_stream *stream, bool on, bool sync)
 			ctrl |= RKVPSS_SCL_HY_EN | RKVPSS_SCL_HC_EN | RKVPSS2X_SW_AVG_SCALE_H_EN;
 		}
 		if (in_h != out_h || !sync) {
-			val = (out_h - 1) * 65536 / (out_h - 1) + 1;
+			val = (out_h - 1) * 65536 / (in_h - 1) + 1;
 			reg = stream->config->scale.vy_fac;
 			rkvpss_unite_write(dev, reg, val);
 
-			val = (out_h - 1) * 4096 / (in_h - 1) + 1;
+			val = (out_h - 1) * 65536 / (in_h - 1) + 1;
 			reg = stream->config->scale.vc_fac;
 			rkvpss_unite_write(dev, reg, val);
 
@@ -1745,7 +1832,7 @@ static void bilinear_scale(struct rkvpss_stream *stream, bool on, bool sync)
 		if (in_w == out_w)
 			val = (in_w / 2) | (in_h << 16);
 		else
-			val = (in_w / 2 + RKMOUDLE_UNITE_EXTEND_PIXEL) | (in_h << 16);
+			val = (in_w / 2 + dev->unite_extend_pixel) | (in_h << 16);
 		reg = stream->config->scale.src_size;
 		rkvpss_idx_write(dev, reg, val, VPSS_UNITE_LEFT);
 
@@ -1810,7 +1897,7 @@ static void bilinear_scale(struct rkvpss_stream *stream, bool on, bool sync)
 		reg = stream->config->scale.hc_offs_mi;
 		rkvpss_idx_write(dev, reg, val, VPSS_UNITE_RIGHT);
 
-		val = (in_w / 2 + RKMOUDLE_UNITE_EXTEND_PIXEL) | (in_h << 16);
+		val = (in_w / 2 + dev->unite_extend_pixel) | (in_h << 16);
 		reg = stream->config->scale.src_size;
 		rkvpss_idx_write(dev, reg, val, VPSS_UNITE_RIGHT);
 
@@ -1870,12 +1957,10 @@ static void rkvpss_stream_stop(struct rkvpss_stream *stream)
 	int ret;
 
 	stream->stopping = true;
-	if (atomic_read(&dev->pipe_stream_cnt) > 0) {
-		ret = wait_event_timeout(stream->done, !stream->streaming,
-					 msecs_to_jiffies(300));
-		if (!ret)
-			v4l2_warn(&dev->v4l2_dev, "%s id:%d timeout\n", __func__, stream->id);
-	}
+	ret = wait_event_timeout(stream->done, !stream->streaming,
+				msecs_to_jiffies(300));
+	if (!ret)
+		v4l2_warn(&dev->v4l2_dev, "%s id:%d timeout\n", __func__, stream->id);
 	stream->stopping = false;
 	stream->streaming = false;
 	if (stream->ops->disable_mi)
@@ -1910,9 +1995,18 @@ static void rkvpss_stop_streaming(struct vb2_queue *queue)
 		rkvpss_stream_stop(stream);
 		rkvpss_pipeline_stream(dev, false);
 	}
+	if (dev->stream_vdev.wrap_line && stream->id == RKVPSS_OUTPUT_CH0)
+		rkvpss_dvbm_deinit(dev);
 	destroy_buf_queue(stream, VB2_BUF_STATE_ERROR);
 	rkvpss_pipeline_close(dev);
 	tasklet_disable(&stream->buf_done_tasklet);
+
+	if (hw->dvbm_refcnt <= 0 && hw->dvbm_flag != DVBM_OFFLINE) {
+		v4l2_dbg(2, rkvpss_debug, &dev->v4l2_dev, "%s: clear vpss2enc_sel\n", __func__);
+		rkvpss_hw_clear_bits(hw, RKVPSS_VPSS_CTRL, RKVPSS_VPSS2ENC_SEL);
+		hw->dvbm_refcnt = 0;
+	}
+
 	v4l2_dbg(1, rkvpss_debug, &dev->v4l2_dev,
 		 "%s %s id:%d exit\n", __func__,
 		 node->vdev.name, stream->id);
@@ -2015,14 +2109,19 @@ static int rkvpss_start_streaming(struct vb2_queue *queue, unsigned int count)
 		goto free_buf_queue;
 	}
 
-	rkvpss_pipeline_open(dev);
+	if (rkvpss_pipeline_open(dev) < 0)
+		goto free_buf_queue;
 
 	ret = rkvpss_stream_start(stream);
 	if (ret < 0) {
 		v4l2_err(&dev->v4l2_dev, "start %s failed\n", node->vdev.name);
 		goto pipe_close;
 	}
-
+	if (dev->stream_vdev.wrap_line && stream->id == RKVPSS_OUTPUT_CH0)
+		if (rkvpss_dvbm_init(stream) != 0) {
+			v4l2_err(&dev->v4l2_dev, "dvbm init failed\n");
+			goto stop_stream;
+		}
 	ret = rkvpss_pipeline_stream(dev, true);
 	if (ret < 0)
 		goto stop_stream;
@@ -2037,6 +2136,8 @@ static int rkvpss_start_streaming(struct vb2_queue *queue, unsigned int count)
 	mutex_unlock(&hw->dev_lock);
 	return 0;
 stop_stream:
+	if (dev->stream_vdev.wrap_line && stream->id == RKVPSS_OUTPUT_CH0)
+		rkvpss_dvbm_deinit(dev);
 	stream->streaming = false;
 	rkvpss_stream_stop(stream);
 pipe_close:
@@ -2168,6 +2269,34 @@ static int rkvpss_set_fmt(struct rkvpss_stream *stream,
 		}
 	}
 
+	/* Add format alignment checks */
+	v4l2_dbg(1, rkvpss_debug, &dev->v4l2_dev,
+		 "format alignment check: width=%d, height=%d, fourcc=0x%x\n",
+		 pixm->width, pixm->height, fmt->fourcc);
+	if (fmt->fourcc == V4L2_PIX_FMT_FBC0 ||
+	    fmt->fourcc == V4L2_PIX_FMT_FBC2) {
+		if (!IS_ALIGNED(pixm->width, 64)) {
+			v4l2_err(&dev->v4l2_dev,
+				 "stream:%d fbc output width %d is not 64 aligned\n",
+				 stream->id, pixm->width);
+			return -EINVAL;
+		}
+		if (!IS_ALIGNED(pixm->height, 4)) {
+			v4l2_err(&dev->v4l2_dev,
+				 "stream:%d fbc output height %d is not 4 aligned\n",
+				 stream->id, pixm->height);
+			return -EINVAL;
+		}
+	} else {
+		/* Check width alignment for non-FBC formats */
+		if (!IS_ALIGNED(pixm->width, 4)) {
+			v4l2_err(&dev->v4l2_dev,
+				 "stream:%d output width %d is not 4 aligned\n",
+				 stream->id, pixm->width);
+			return -EINVAL;
+		}
+	}
+
 	pixm->num_planes = fmt->mplanes;
 	pixm->field = V4L2_FIELD_NONE;
 	if (!pixm->quantization)
@@ -2190,17 +2319,41 @@ static int rkvpss_set_fmt(struct rkvpss_stream *stream,
 
 		if (fmt->fourcc == V4L2_PIX_FMT_TILE420 || fmt->fourcc == V4L2_PIX_FMT_TILE422)
 			bytesperline = ALIGN(((width / 4) * fmt->bpp[i]), 16);
+		else if (fmt->fourcc == V4L2_PIX_FMT_FBC0 || fmt->fourcc == V4L2_PIX_FMT_FBC2)
+			bytesperline = ((w + 63) / 64) *
+			((fmt->output_fmt == RKVPSS_MI_CHN_WR_OUTPUT_YUV420) ? 384 : 512);
 		else
 			bytesperline = width * DIV_ROUND_UP(fmt->bpp[i], 8);
 
 		if (i != 0 || plane_fmt->bytesperline < bytesperline)
 			plane_fmt->bytesperline = bytesperline;
 
-		if (fmt->fourcc == V4L2_PIX_FMT_TILE420 || fmt->fourcc == V4L2_PIX_FMT_TILE422)
+		switch (fmt->fmt_type) {
+		case FMT_TILE:
 			plane_fmt->sizeimage = plane_fmt->bytesperline * (height / 4);
-		else
-			plane_fmt->sizeimage = plane_fmt->bytesperline * height;
+			break;
+		case FMT_FBC:
+			if (i == 0) {//FBC header
+				// Calculate virtual width - align width to a multiple of 64
+				u32 virtual_width = ((w + 63) / 64) * 64;
 
+				if (virtual_width > w) {
+					// Case where virtual_width > w
+					stream->fbc_head_size = virtual_width * ((h + 3) / 4);
+				} else {
+					// Case where virtual_width <= w
+					stream->fbc_head_size = ((w + 63) / 64) * ((h + 3) / 4) * 16;
+				}
+				plane_fmt->sizeimage = stream->fbc_head_size;
+			} else {//FBC Payload
+				plane_fmt->sizeimage = ((w + 63) / 64) *
+					((fmt->output_fmt == RKVPSS_MI_CHN_WR_OUTPUT_YUV420) ? 384 : 512) *
+					((h + 3) / 4);
+			}
+			break;
+		default:
+			plane_fmt->sizeimage = plane_fmt->bytesperline * height;
+		}
 		imagsize += plane_fmt->sizeimage;
 	}
 	if (fmt->mplanes == 1)
@@ -2309,6 +2462,16 @@ static int rkvpss_enum_fmt_vid_mplane(struct file *file, void *priv,
 	case V4L2_PIX_FMT_TILE422:
 		strscpy(f->description,
 			"Rockchip yuv422 tile",
+			sizeof(f->description));
+		break;
+	case V4L2_PIX_FMT_FBC0:
+		strscpy(f->description,
+			"Rockchip FBCE64x4 yuv420",
+			sizeof(f->description));
+		break;
+	case V4L2_PIX_FMT_FBC2:
+		strscpy(f->description,
+			"Rockchip FBCE64x4 yuv422",
 			sizeof(f->description));
 		break;
 	default:
@@ -2624,29 +2787,29 @@ void rkvpss_cmsc_config_v20(struct rkvpss_device *dev, bool sync)
 					    win->point[1].x != win->point[2].x) {
 						right_cfg.win[i].win_en &= ~BIT(j);
 					} else {
-						win->point[0].x = RKMOUDLE_UNITE_EXTEND_PIXEL;
-						win->point[3].x = RKMOUDLE_UNITE_EXTEND_PIXEL;
+						win->point[0].x = dev->unite_extend_pixel;
+						win->point[3].x = dev->unite_extend_pixel;
 						win->point[1].x = win->point[1].x -
 								  (dev->vpss_sdev.in_fmt.width / 2)
-								  + RKMOUDLE_UNITE_EXTEND_PIXEL;
+								  + dev->unite_extend_pixel;
 						win->point[2].x = win->point[2].x -
 								  (dev->vpss_sdev.in_fmt.width / 2)
-								  + RKMOUDLE_UNITE_EXTEND_PIXEL;
+								  + dev->unite_extend_pixel;
 					}
 				} else {
 					/** all right **/
 					win->point[0].x = win->point[0].x -
 							  (dev->vpss_sdev.in_fmt.width / 2) +
-							  RKMOUDLE_UNITE_EXTEND_PIXEL;
+							  dev->unite_extend_pixel;
 					win->point[1].x = win->point[1].x -
 							  (dev->vpss_sdev.in_fmt.width / 2) +
-							  RKMOUDLE_UNITE_EXTEND_PIXEL;
+							  dev->unite_extend_pixel;
 					win->point[2].x = win->point[2].x -
 							  (dev->vpss_sdev.in_fmt.width / 2) +
-							  RKMOUDLE_UNITE_EXTEND_PIXEL;
+							  dev->unite_extend_pixel;
 					win->point[3].x = win->point[3].x -
 							  (dev->vpss_sdev.in_fmt.width / 2) +
-							  RKMOUDLE_UNITE_EXTEND_PIXEL;
+							  dev->unite_extend_pixel;
 				}
 			}
 		}
@@ -2758,9 +2921,6 @@ static int rkvpss_set_wrap_line(struct rkvpss_stream *stream, int *wrap_line)
 		return -EINVAL;
 
 	vpss_dev->stream_vdev.wrap_line = *wrap_line;
-
-	//set_wrap todo
-
 	return 0;
 }
 

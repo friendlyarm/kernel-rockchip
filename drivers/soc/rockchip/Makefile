@@ -2,10 +2,12 @@
 #
 # Rockchip Soc drivers
 #
+obj-$(CONFIG_ROCKCHIP_AOA_MIDDLEWARE) += aoa_middleware/
 obj-$(CONFIG_ROCKCHIP_AMP) += rockchip_amp.o
 obj-$(CONFIG_ROCKCHIP_CPUINFO) += rockchip-cpuinfo.o
 obj-$(CONFIG_ROCKCHIP_CSU) += rockchip_csu.o
 obj-$(CONFIG_ROCKCHIP_DISABLE_UNUSED) += rockchip_disable_unused.o
+obj-$(CONFIG_ROCKCHIP_DMC_DEBUG) += rockchip_dmc_debug.o
 obj-$(CONFIG_ROCKCHIP_GRF) += grf.o
 obj-$(CONFIG_ROCKCHIP_HW_DECOMPRESS) += rockchip_decompress.o
 obj-$(CONFIG_ROCKCHIP_HW_DECOMPRESS_USER) += rockchip_decompress_user.o

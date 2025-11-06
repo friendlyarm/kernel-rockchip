@@ -250,7 +250,7 @@ static int rkce_init(void *rkce_hw)
 	uint32_t value = 0;
 	int ret;
 
-	ret = rkce_check_version(rkce_hw);
+	ret = rkce_check_version(rkce_reg);
 	if (ret)
 		goto exit;
 

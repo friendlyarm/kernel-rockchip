@@ -51,9 +51,17 @@ enum {
 	ROCKIT_DVBM_START,
 };
 
+enum {
+	DVBM_DEINIT = 0,
+	DVBM_ONLINE = 1,
+	DVBM_OFFLINE = 2,
+};
+
 enum rkvpss_fmt_pix_type {
 	FMT_YUV,
 	FMT_RGB,
+	FMT_TILE,
+	FMT_FBC,
 };
 
 enum rkvpss_rotate {
@@ -110,6 +118,7 @@ static inline int vpss_outchn_max(int version)
 }
 
 extern int rkvpss_debug;
+extern int rkvpss_buf_dbg;
 extern struct platform_driver rkvpss_plat_drv;
 extern int rkvpss_cfginfo_num;
 

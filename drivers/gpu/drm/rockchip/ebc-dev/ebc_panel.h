@@ -52,5 +52,6 @@ struct ebc_panel {
 	u32 gate_dummy_lenth;
 	u32 sdoe_mode;
 	u32 sdce_width;
+	bool pmic_early_power_on;
 };
 #endif

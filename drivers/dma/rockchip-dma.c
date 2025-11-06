@@ -630,12 +630,14 @@ static irqreturn_t rk_dma_irq_handler(int irq, void *dev_id)
 		c = l->vchan;
 		if (c) {
 			spin_lock(&c->vc.lock);
-			if (c->cyclic) {
-				vchan_cyclic_callback(&l->ds_run->vd);
-			} else {
-				vchan_cookie_complete(&l->ds_run->vd);
-				l->ds_done = l->ds_run;
-				task = 1;
+			if (l->ds_run) {
+				if (c->cyclic) {
+					vchan_cyclic_callback(&l->ds_run->vd);
+				} else {
+					vchan_cookie_complete(&l->ds_run->vd);
+					l->ds_done = l->ds_run;
+					task = 1;
+				}
 			}
 			spin_unlock(&c->vc.lock);
 			writel(readl(RK_DMA_LCH_IS), RK_DMA_LCH_IS);
@@ -679,6 +681,19 @@ static int rk_dma_lch_get_bytes_xfered(struct rk_dma_lch *l)
 		bytes = ds->desc_hw[0].sar - ds->desc_hw[1].sar;
 	else
 		bytes = ds->desc_hw[0].dar - ds->desc_hw[1].dar;
+
+	/*
+	 * The transferred bytes are calculated by subtracting first_lli.base from
+	 * current position (cur_pos). However, cur_pos remains 0 until the first
+	 * burst transfer completes, which could result in a negative value.
+	 * This leads to incorrect byte count reporting.
+	 *
+	 * Fix the overflow by clamping the calculated bytes to 0 when negative,
+	 * ensuring the reported transfer position matches hardware state before
+	 * the first burst completion.
+	 */
+	if (bytes < 0)
+		bytes = 0;
 
 	return bytes;
 }
@@ -1061,6 +1076,97 @@ rk_dma_prep_dma_cyclic(struct dma_chan *chan, dma_addr_t dma_addr, size_t buf_le
 	return vchan_tx_prep(&c->vc, &ds->vd, flags);
 }
 
+static struct dma_async_tx_descriptor *
+rk_dma_prep_interleaved_dma(struct dma_chan *chan, struct dma_interleaved_template *xt,
+			   unsigned long flags)
+{
+	struct rk_dma_chan *c = to_rk_chan(chan);
+	struct rk_dma_desc_sw *ds;
+	size_t size, src_icg, dst_icg, period_bytes, full_period_bytes, full_buffer_bytes;
+	size_t nump = 0, numf = 0;
+	int num_periods, num = 0;
+	dma_addr_t src = 0, dst = 0, dma_addr = 0;
+
+	if (!xt->numf || !xt->sgl[0].size || xt->frame_size != 1)
+		return NULL;
+
+#ifdef CONFIG_NO_GKI
+	nump = xt->nump;
+#else
+	nump = xt->sgl[1].size;
+#endif
+	numf = xt->numf;
+	size = xt->sgl[0].size;
+	period_bytes = size * nump;
+
+	if (flags & DMA_PREP_REPEAT && (!nump || (numf % nump)))
+		return NULL;
+
+	if (period_bytes > DMA_MAX_SIZE) {
+		dev_err(chan->device->dev, "maximum period size exceeded\n");
+		return NULL;
+	}
+
+	src_icg = dmaengine_get_src_icg(xt, &xt->sgl[0]);
+	dst_icg = dmaengine_get_dst_icg(xt, &xt->sgl[0]);
+
+	if (flags & DMA_PREP_REPEAT) {
+		num_periods = numf / nump;
+		c->cyclic = 1;
+	} else {
+		num_periods = 1;
+		c->cyclic = 0;
+	}
+
+	if (rk_pre_config(chan, xt->dir))
+		return NULL;
+
+	ds = rk_alloc_desc_resource(num_periods + 1, chan);
+	if (!ds)
+		return NULL;
+
+	c->ctl0 &= ~TRF_CTL0_MSIZE_MASK;
+	c->ctl0 |= TRF_CTL0_MSIZE(size);
+	c->ccfg |= TRF_CFG_STRIDE_EN | TRF_CFG_STRIDE_MODE_TRANS;
+	if (xt->dir == DMA_MEM_TO_DEV) {
+		ds->desc_hw[0].stride_inc = STRIDE_INC(src_icg);
+		dma_addr = xt->src_start;
+		full_period_bytes = (size + src_icg) * nump;
+		full_buffer_bytes = (size + src_icg) * numf;
+	} else {
+		ds->desc_hw[0].stride_inc = STRIDE_INC(dst_icg);
+		dma_addr = xt->dst_start;
+		full_period_bytes = (size + dst_icg) * nump;
+		full_buffer_bytes = (size + dst_icg) * numf;
+	}
+
+	/* the first one used as cmd entry */
+	rk_dma_fill_desc(ds, dst, src, 0, 0, c->ctl0, c->ctl1, c->ccfg);
+	num = 1;
+
+	while (num < (num_periods + 1)) {
+		if (xt->dir == DMA_MEM_TO_DEV) {
+			src = dma_addr;
+			dst = c->dev_addr;
+		} else if (xt->dir == DMA_DEV_TO_MEM) {
+			src = c->dev_addr;
+			dst = dma_addr;
+		}
+		rk_dma_fill_desc(ds, dst, src, period_bytes, num++, c->ctl0, c->ctl1, c->ccfg);
+		dma_addr += full_period_bytes;
+	}
+
+	ds->desc_hw[num - 1].llp_nxt = ds->desc_hw_lli + sizeof(struct rk_desc_hw);
+	ds->desc_hw[num - 1].trf_ctl0 |= TRF_CTL0_CNT_CLR;
+	ds->size = full_buffer_bytes;
+	ds->dir = xt->dir;
+
+	dev_dbg(chan->device->dev, "size: %zu, src_icg: %zu, dst_icg: %zu, nump: %zu, numf: %zu\n",
+		size, src_icg, dst_icg, nump, numf);
+
+	return vchan_tx_prep(&c->vc, &ds->vd, flags);
+}
+
 static int rk_dma_config(struct dma_chan *chan, struct dma_slave_config *cfg)
 {
 	struct rk_dma_chan *c = to_rk_chan(chan);
@@ -1077,7 +1183,7 @@ static int rk_dma_terminate_all(struct dma_chan *chan)
 {
 	struct rk_dma_chan *c = to_rk_chan(chan);
 	struct rk_dma_dev *d = to_rk_dma(chan->device);
-	struct rk_dma_lch *l = c->lch;
+	struct rk_dma_lch *l;
 	unsigned long flags;
 	LIST_HEAD(head);
 
@@ -1088,6 +1194,7 @@ static int rk_dma_terminate_all(struct dma_chan *chan)
 	spin_unlock_irqrestore(&d->lock, flags);
 
 	spin_lock_irqsave(&c->vc.lock, flags);
+	l = c->lch;
 	if (l) {
 		rk_dma_terminate_chan(l, d);
 		if (l->ds_run)
@@ -1115,9 +1222,14 @@ static int rk_dma_transfer_pause(struct dma_chan *chan)
 static int rk_dma_transfer_resume(struct dma_chan *chan)
 {
 	struct rk_dma_chan *c = to_rk_chan(chan);
-	struct rk_dma_lch *l = c->lch;
+	struct rk_dma_lch *l;
+	unsigned long flags;
 
-	writel(LCH_TRF_CMD_DMA_RESUME, RK_DMA_LCH_TRF_CMD);
+	spin_lock_irqsave(&c->vc.lock, flags);
+	l = c->lch;
+	if (l)
+		writel(LCH_TRF_CMD_DMA_RESUME, RK_DMA_LCH_TRF_CMD);
+	spin_unlock_irqrestore(&c->vc.lock, flags);
 
 	return 0;
 }
@@ -1225,12 +1337,16 @@ static int rk_dma_probe(struct platform_device *pdev)
 	dma_cap_set(DMA_MEMCPY, d->slave.cap_mask);
 	dma_cap_set(DMA_CYCLIC, d->slave.cap_mask);
 	dma_cap_set(DMA_PRIVATE, d->slave.cap_mask);
+	dma_cap_set(DMA_INTERLEAVE, d->slave.cap_mask);
+	dma_cap_set(DMA_REPEAT, d->slave.cap_mask);
+	dma_cap_set(DMA_LOAD_EOT, d->slave.cap_mask);
 	d->slave.dev = &pdev->dev;
 	d->slave.device_free_chan_resources = rk_dma_free_chan_resources;
 	d->slave.device_tx_status = rk_dma_tx_status;
 	d->slave.device_prep_dma_memcpy = rk_dma_prep_memcpy;
 	d->slave.device_prep_slave_sg = rk_dma_prep_slave_sg;
 	d->slave.device_prep_dma_cyclic = rk_dma_prep_dma_cyclic;
+	d->slave.device_prep_interleaved_dma = rk_dma_prep_interleaved_dma;
 	d->slave.device_issue_pending = rk_dma_issue_pending;
 	d->slave.device_config = rk_dma_config;
 	d->slave.device_terminate_all = rk_dma_terminate_all;
@@ -1353,7 +1469,21 @@ static struct platform_driver rk_pdma_driver = {
 	.remove		= rk_dma_remove,
 };
 
+#ifdef CONFIG_ROCKCHIP_THUNDER_BOOT
+static int __init rk_pdma_driver_init(void)
+{
+	return platform_driver_register(&rk_pdma_driver);
+}
+arch_initcall_sync(rk_pdma_driver_init);
+
+static void __exit rk_pdma_driver_exit(void)
+{
+	platform_driver_unregister(&rk_pdma_driver);
+}
+module_exit(rk_pdma_driver_exit);
+#else
 module_platform_driver(rk_pdma_driver);
+#endif
 
 MODULE_DESCRIPTION("Rockchip DMA Driver");
 MODULE_AUTHOR("Sugar.Zhang@rock-chips.com");

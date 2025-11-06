@@ -19,6 +19,7 @@
 #include "hw.h"
 #include "aiisp.h"
 #include "version.h"
+#include "procfs.h"
 
 #define RKAIISP_VERNO_LEN		10
 
@@ -29,6 +30,10 @@ MODULE_PARM_DESC(debug, "Debug level (0-1)");
 int rkaiisp_showreg;
 module_param_named(showreg, rkaiisp_showreg, int, 0644);
 MODULE_PARM_DESC(showreg, "show register (0-1)");
+
+int rkaiisp_stdfps = 30;
+module_param_named(standardfps, rkaiisp_stdfps, int, 0644);
+MODULE_PARM_DESC(standardfps, "standard fps");
 
 static char rkaiisp_version[RKAIISP_VERNO_LEN];
 module_param_string(version, rkaiisp_version, RKAIISP_VERNO_LEN, 0444);
@@ -160,6 +165,8 @@ static int rkaiisp_plat_probe(struct platform_device *pdev)
 		goto err_unreg_media_dev;
 	}
 
+	rkaiisp_proc_init(aidev);
+
 	v4l2_info(v4l2_dev, "probe end.\n");
 	return 0;
 
@@ -179,6 +186,7 @@ static int rkaiisp_plat_remove(struct platform_device *pdev)
 
 	pm_runtime_disable(&pdev->dev);
 
+	rkaiisp_proc_cleanup(aidev);
 	media_device_unregister(&aidev->media_dev);
 	v4l2_device_unregister(&aidev->v4l2_dev);
 	rkaiisp_unregister_vdev(aidev);

@@ -15,15 +15,15 @@
 #include <drm/drm_fourcc.h>
 #include <drm/drm_edid.h>
 #include <drm/drm_gem.h>
+#include <drm/drm_panel.h>
 #include <drm/rockchip_drm.h>
 
 #include <linux/media-bus-format.h>
 #include <linux/module.h>
 #include <linux/component.h>
+#include <linux/debugfs.h>
 
 #include <soc/rockchip/rockchip_dmc.h>
-
-#include "../panel/panel-simple.h"
 
 #include "rockchip_drm_debugfs.h"
 
@@ -119,6 +119,11 @@ enum rockchip_color_bar_mode {
 	ROCKCHIP_COLOR_BAR_OFF = 0,
 	ROCKCHIP_COLOR_BAR_HORIZONTAL = 1,
 	ROCKCHIP_COLOR_BAR_VERTICAL = 2,
+	ROCKCHIP_COLOR_BAR_HORIZONTAL_COLOR_GRADIENT = 3,
+	ROCKCHIP_COLOR_BAR_VERTICAL_COLOR_GRADIENT = 4,
+	ROCKCHIP_COLOR_BAR_MUTANT = 5,
+	ROCKCHIP_COLOR_BAR_FIX0 = 6,
+	ROCKCHIP_COLOR_BAR_FIX1 = 7,
 };
 
 enum rockchip_drm_split_area {
@@ -144,7 +149,7 @@ struct rockchip_drm_sub_dev {
 	struct list_head list;
 	struct drm_connector *connector;
 	struct device_node *of_node;
-	int (*loader_protect)(struct drm_encoder *encoder, bool on);
+	int (*loader_protect)(struct rockchip_drm_sub_dev *sub_dev, bool on);
 	void (*update_vfp_for_vrr)(struct drm_connector *connector, struct drm_display_mode *mode,
 				   int vfp);
 };
@@ -267,6 +272,15 @@ struct post_sharp {
 	u32 regs[SHARP_REG_LENGTH / 4];
 };
 
+struct rockchip_hdmi_vrr_state {
+	bool refresh_rate_ready_to_change;
+	bool m_const;
+	u8 next_tfr_val;
+	u8 fva_factor_m1_val;
+	unsigned int vrr_frame_cnt;
+	const struct mvrr_const_val *mconst_val;
+};
+
 struct rockchip_crtc_state {
 	struct drm_crtc_state base;
 	int vp_id;
@@ -274,7 +288,9 @@ struct rockchip_crtc_state {
 	int output_mode;
 	int output_bpc;
 	int output_flags;
+	int data_map_mode;
 	bool enable_afbc;
+	bool yuv_overlay;
 	/**
 	 * @splice_mode: enabled when display a hdisplay > 4096 on rk3588
 	 */
@@ -298,6 +314,8 @@ struct rockchip_crtc_state {
 	 */
 	bool sharp_en;
 
+	bool dimming_changed;
+
 	struct drm_tv_connector_state *tv_state;
 	int left_margin;
 	int right_margin;
@@ -318,7 +336,6 @@ struct rockchip_crtc_state {
 	u32 output_if_left_panel;
 	u32 bus_format;
 	u32 bus_flags;
-	int yuv_overlay;
 	int post_r2y_en;
 	int post_y2r_en;
 	int post_csc_mode;
@@ -342,11 +359,13 @@ struct rockchip_crtc_state {
 	struct drm_dsc_picture_parameter_set pps;
 	struct rockchip_dsc_sink_cap dsc_sink_cap;
 	struct rockchip_hdr_state hdr;
+	struct rockchip_hdmi_vrr_state hdmi_vrr;
 	struct drm_property_blob *hdr_ext_data;
 	struct drm_property_blob *acm_lut_data;
 	struct drm_property_blob *post_csc_data;
 	struct drm_property_blob *post_sharp_data;
 	struct drm_property_blob *cubic_lut_data;
+	struct drm_property_blob *dimming_data;
 
 	int request_refresh_rate;
 	int max_refresh_rate;
@@ -491,6 +510,47 @@ struct next_hdr_sink_data {
 	struct ver_12_v2 ver_12_v2;
 } __packed;
 
+/* refer to HDMI2.1B P453 */
+enum TARGET_FRAME_RATE {
+	TFR_QMSVRR_INACTIVE = 0,
+	TFR_23P97,
+	TFR_24,
+	TFR_25,
+	TFR_29P97,
+	TFR_30,
+	TFR_47P95,
+	TFR_48,
+	TFR_50,
+	TFR_59P94,
+	TFR_60,
+	TFR_100,
+	TFR_119P88,
+	TFR_120,
+	TFR_MAX,
+};
+
+enum hdmi_brr_vic {
+	HDMI_16_1920x1080P60_16x9 = 16,
+	HDMI_63_1920x1080P120_16x9 = 63,
+	HDMI_4_1280x720P60_16x9 = 4,
+	HDMI_47_1280x720P120_16x9 = 47,
+	HDMI_97_3840x2160P60_16x9 = 97,
+	HDMI_102_4096x2160P60_256x135 = 102,
+};
+
+struct mvrr_const_val {
+	/* unit: 100  6000, 5994, 5000, 3000, 2997, 2500, 2400, 2397 */
+	u16 vrefresh_khz;
+	u16 vtotal_fixed; /* vtotal_fixed is mutex with bit_len */
+	u8 bit_len; /* current max value is 16 * 8, 128 */
+	u8 frac_array[16];
+};
+
+struct mvrr_const_st {
+	enum hdmi_brr_vic brr_vic; /* the vic of brr */
+	const struct mvrr_const_val *val[];
+};
+
 /*
  * Rockchip drm private crtc funcs.
  * @loader_protect: protect loader logo crtc's power
@@ -498,7 +558,6 @@ struct next_hdr_sink_data {
  * @disable_vblank: disable crtc vblank irq.
  * @bandwidth: report present crtc bandwidth consume.
  * @cancel_pending_vblank: cancel pending vblank.
- * @debugfs_init: init crtc debugfs.
  * @debugfs_dump: debugfs to dump crtc and plane state.
  * @regs_dump: dump vop current register config.
  * @mode_valid: verify that the current mode is supported.
@@ -518,7 +577,6 @@ struct rockchip_crtc_funcs {
 				      struct drm_file *file_priv);
 	int (*sysfs_init)(struct device *dev, struct drm_crtc *crtc);
 	int (*sysfs_fini)(struct device *dev, struct drm_crtc *crtc);
-	int (*debugfs_init)(struct drm_minor *minor, struct drm_crtc *crtc);
 	int (*debugfs_dump)(struct drm_crtc *crtc, struct seq_file *s);
 	void (*regs_dump)(struct drm_crtc *crtc, struct seq_file *s);
 	void (*active_regs_dump)(struct drm_crtc *crtc, struct seq_file *s);
@@ -581,6 +639,9 @@ struct rockchip_drm_private {
 	struct drm_property *connector_id_prop;
 	struct drm_property *split_area_prop;
 
+	/* private local dimming prop */
+	struct drm_property *dimming_data_prop;
+
 	const struct rockchip_crtc_funcs *crtc_funcs[ROCKCHIP_MAX_CRTC];
 
 	uint64_t iommu_fault_count;
@@ -622,11 +683,24 @@ struct rockchip_encoder {
 	struct drm_encoder encoder;
 };
 
+struct rockchip_drm_vrr_cap {
+	bool qms;
+	bool m_delta;
+	bool cinema_vrr;
+	bool negm_vrr;
+	bool fva;
+	bool qms_tfr_max;
+	bool qms_tfr_min;
+	u8 vrr_min;
+	u16 vrr_max;
+};
+
 struct rockchip_drm_hdmi21_data {
 	u8 max_frl_rate_per_lane;
 	u8 max_lanes;
 	bool allm_supported;
 	struct rockchip_drm_dsc_cap dsc_cap;
+	struct rockchip_drm_vrr_cap vrr_cap;
 };
 
 void rockchip_connector_update_vfp_for_vrr(struct drm_crtc *crtc, struct drm_display_mode *mode,
@@ -694,6 +768,7 @@ const char *rockchip_drm_modifier_to_string(uint64_t modifier);
 void rockchip_drm_reset_iommu_fault_handler_rate_limit(void);
 void rockchip_drm_send_error_event(struct rockchip_drm_private *priv,
 				   enum rockchip_drm_error_event_type event);
+int rockchip_drm_panel_loader_protect(struct drm_panel *panel, bool on);
 
 __printf(3, 4)
 void rockchip_drm_dbg(const struct device *dev,
@@ -703,6 +778,10 @@ __printf(3, 4)
 void rockchip_drm_dbg_thread_info(const struct device *dev,
 				  enum rockchip_drm_debug_category category,
 				  const char *format, ...);
+u16 rockchip_hdmi_vrr_tfr_match_to_vrefresh(u8 tfr);
+const struct
+mvrr_const_val *rockchip_hdmi_vrr_get_vrrconf_mconst(enum hdmi_brr_vic brr_vic, u16 vrefresh_khz);
+u16 rockchip_hdmi_vrr_calc_new_vtotal(const struct mvrr_const_val *mvrr, u32 frame_cnt);
 
 extern struct platform_driver cdn_dp_driver;
 extern struct platform_driver dw_hdmi_rockchip_pltfm_driver;

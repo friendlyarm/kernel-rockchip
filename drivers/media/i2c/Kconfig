@@ -445,6 +445,19 @@ config VIDEO_GC5035
 	  To compile this driver as a module, choose M here: the
 	  module will be called gc5035.
 
+config VIDEO_GC6603
+	tristate "GalaxyCore GC6603 sensor support"
+	depends on VIDEO_DEV && I2C
+	depends on MEDIA_CAMERA_SUPPORT
+	select MEDIA_CONTROLLER
+	select VIDEO_V4L2_SUBDEV_API
+	select V4L2_FWNODE
+	help
+	  Support for the GalaxyCore GC6603 sensor.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called gc6603.
+
 config VIDEO_GC8034
 	tristate "GalaxyCore GC8034 sensor support"
 	depends on I2C && VIDEO_DEV
@@ -824,6 +837,19 @@ config VIDEO_IMX577
 	  To compile this driver as a module, choose M here: the
 	  module will be called imx577.
 
+config VIDEO_IMX582
+	tristate "Sony IMX582 sensor support"
+	depends on I2C && VIDEO_DEV
+	depends on MEDIA_CAMERA_SUPPORT
+	select MEDIA_CONTROLLER
+	select VIDEO_V4L2_SUBDEV_API
+	help
+	  This is a Video4Linux2 sensor driver for the Sony
+	  IMX582 camera.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called imx582.
+
 config VIDEO_IMX586
 	tristate "Sony IMX586 sensor support"
 	depends on I2C && VIDEO_DEV
@@ -836,6 +862,32 @@ config VIDEO_IMX586
 
 	  To compile this driver as a module, choose M here: the
 	  module will be called imx586.
+
+config VIDEO_IMX678
+	tristate "Sony IMX678 sensor support"
+	depends on I2C && VIDEO_DEV
+	depends on MEDIA_CAMERA_SUPPORT
+	select MEDIA_CONTROLLER
+	select VIDEO_V4L2_SUBDEV_API
+	help
+	  This is a Video4Linux2 sensor driver for the Sony
+	  IMX678 camera.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called imx678.
+
+config VIDEO_IMX766
+	tristate "Sony IMX766 sensor support"
+	depends on I2C && VIDEO_DEV
+	depends on MEDIA_CAMERA_SUPPORT
+	select MEDIA_CONTROLLER
+	select VIDEO_V4L2_SUBDEV_API
+	help
+	  This is a Video4Linux2 sensor driver for the Sony
+	  IMX766 camera.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called imx766.
 
 config VIDEO_JX_F37
 	tristate "Soi JX_F37 sensor support"
@@ -1092,6 +1144,17 @@ config VIDEO_OS04D10
 	  This is a Video4Linux2 sensor driver for the OmniVision
 	  OS04D10 camera.
 
+config VIDEO_OS04E10
+	tristate "OmniVision OS04E10 sensor support"
+	depends on I2C && VIDEO_DEV
+	depends on MEDIA_CAMERA_SUPPORT
+	select MEDIA_CONTROLLER
+	select VIDEO_V4L2_SUBDEV_API
+	select V4L2_FWNODE
+	help
+	  This is a Video4Linux2 sensor driver for the OmniVision
+	  OS04E10 camera.
+
 config VIDEO_OS05A20
 	tristate "OmniVision OS05A20 sensor support"
 	depends on I2C && VIDEO_DEV
@@ -1124,6 +1187,17 @@ config VIDEO_OS08A20
 	help
 	  This is a Video4Linux2 sensor driver for the OmniVision
 	  OS08A20 camera.
+
+config VIDEO_OS12D40
+	tristate "OmniVision OS12D40 sensor support"
+	depends on I2C && VIDEO_DEV
+	depends on MEDIA_CAMERA_SUPPORT
+	select MEDIA_CONTROLLER
+	select VIDEO_V4L2_SUBDEV_API
+	select V4L2_FWNODE
+	help
+	  This is a Video4Linux2 sensor driver for the OmniVision
+	  OS12D40 camera.
 
 config VIDEO_OV02A10
 	tristate "OmniVision OV02A10 sensor support"
@@ -1650,6 +1724,19 @@ config VIDEO_OV9734
 	  To compile this driver as a module, choose M here: the
 	  module's name is ov9734.
 
+config VIDEO_OX03C10
+	tristate "OmniVision OX03C10 sensor support"
+	depends on VIDEO_DEV && I2C
+	select MEDIA_CONTROLLER
+	select VIDEO_V4L2_SUBDEV_API
+	select V4L2_FWNODE
+	help
+	  This is a Video4Linux2 sensor driver for the OmniVision
+	  OX03C10 camera.
+
+	  To compile this driver as a module, choose M here: the
+	  module's name is OX03C10.
+
 config VIDEO_PREISP_DUMMY_SENSOR
 	tristate "Preisp dummy sensor support"
 	depends on VIDEO_DEV && I2C
@@ -1659,6 +1746,16 @@ config VIDEO_PREISP_DUMMY_SENSOR
 	  Support for the preisp dummy sensor.
 	  To compile this driver as a module, choose M here: the
 	  module will be called pisp_dmy.
+
+config VIDEO_PS5458
+	tristate "Prime PS5458 sensor support"
+	depends on I2C && VIDEO_DEV
+	depends on MEDIA_CAMERA_SUPPORT
+	select MEDIA_CONTROLLER
+	select VIDEO_V4L2_SUBDEV_API
+	help
+	  This is a Video4Linux2 sensor driver for the Prime
+	  PS5458 camera.
 
 config VIDEO_RDACM20
 	tristate "IMI RDACM20 camera support"
@@ -1894,6 +1991,16 @@ config VIDEO_SC2310
 	  This is a Video4Linux2 sensor driver for the SmartSens
 	  SC2310 camera.
 
+config VIDEO_SC231HAI
+	tristate "SmartSens SC231HAI sensor support"
+	depends on I2C && VIDEO_DEV
+	select MEDIA_CONTROLLER
+	select VIDEO_V4L2_SUBDEV_API
+	select V4L2_FWNODE
+	help
+	  This is a Video4Linux2 sensor driver for the SmartSens
+	  SC231HAI camera.
+
 config VIDEO_SC2336
 	tristate "SmartSens SC2336 sensor support"
 	depends on I2C && VIDEO_DEV
@@ -1914,6 +2021,16 @@ config VIDEO_SC2355
 	  Support for the SmartSens SC2355 sensor.
 	  To compile this driver as a module, choose M here: the
 	  module will be called sc2355.
+
+config VIDEO_SC235HAI
+	tristate "SmartSens SC235HAI sensor support"
+	depends on I2C && VIDEO_DEV
+	select MEDIA_CONTROLLER
+	select VIDEO_V4L2_SUBDEV_API
+	select V4L2_FWNODE
+	help
+	  This is a Video4Linux2 sensor driver for the SmartSens
+	  SC235HAI camera.
 
 config VIDEO_SC301IOT
     tristate "SmartSens SC301IOT sensor support"
@@ -2025,6 +2142,16 @@ config VIDEO_SC450AI
 	  This is a Video4Linux2 sensor driver for the SmartSens
 	  SC450ai camera.
 
+config VIDEO_SC485SL
+	tristate "SmartSens SC485SL sensor support"
+	depends on I2C && VIDEO_DEV
+	select MEDIA_CONTROLLER
+	select VIDEO_V4L2_SUBDEV_API
+	select V4L2_FWNODE
+	help
+	  This is a Video4Linux2 sensor driver for the SmartSens
+	  sc485sl camera.
+
 config VIDEO_SC500AI
 	tristate "SmartSens SC500AI sensor support"
 	depends on I2C && VIDEO_DEV
@@ -2064,6 +2191,16 @@ config VIDEO_SC5336
 	help
 	  This is a Video4Linux2 sensor driver for the SmartSens
 	  SC5336 camera.
+
+config VIDEO_SC635HAI
+	tristate "SmartSens SC635HAI sensor support"
+	depends on I2C && VIDEO_DEV
+	select MEDIA_CONTROLLER
+	select VIDEO_V4L2_SUBDEV_API
+	select V4L2_FWNODE
+	help
+	  This is a Video4Linux2 sensor driver for the SmartSens
+	  SC635HAI camera.
 
 config VIDEO_SC830AI
 	tristate "SmartSens SC830AI sensor support"

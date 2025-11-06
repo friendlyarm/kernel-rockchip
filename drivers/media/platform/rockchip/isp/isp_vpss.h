@@ -19,12 +19,19 @@
 #define RKISP_VPSS_CMD_FRAME_INFO \
 	_IOW('V', BASE_VIDIOC_PRIVATE + 4, struct rkisp_vpss_frame_info)
 
+#define RKISP_VPSS_GET_ISP_WORKING \
+	_IOR('V', BASE_VIDIOC_PRIVATE + 5, int)
+
+#define RKISP_VPSS_GET_UNITE_EXTEND_PIXEL \
+	_IOR('V', BASE_VIDIOC_PRIVATE + 6, int)
+
 struct rkisp_vpss_sof {
 	u32 irq;
 	u32 seq;
 	u64 timestamp;
 	u32 unite_index;
-	u32 reserved;
+	u32 grey;
+	u32 skip_frame;
 };
 
 struct rkisp_vpss_frame_info {

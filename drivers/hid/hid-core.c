@@ -1123,6 +1123,8 @@ static void hid_apply_multiplier(struct hid_device *hid,
 	while (multiplier_collection->parent_idx != -1 &&
 	       multiplier_collection->type != HID_COLLECTION_LOGICAL)
 		multiplier_collection = &hid->collection[multiplier_collection->parent_idx];
+	if (multiplier_collection->type != HID_COLLECTION_LOGICAL)
+		multiplier_collection = NULL;
 
 	effective_multiplier = hid_calculate_multiplier(hid, multiplier);
 
@@ -2961,7 +2963,11 @@ static void __exit hid_exit(void)
 	hid_quirks_exit(HID_BUS_ANY);
 }
 
+#ifdef CONFIG_INITCALL_ASYNC
+rootfs_initcall(hid_init);
+#else
 module_init(hid_init);
+#endif
 module_exit(hid_exit);
 
 MODULE_AUTHOR("Andreas Gal");

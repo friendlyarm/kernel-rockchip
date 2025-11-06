@@ -306,12 +306,16 @@ struct rk628 {
 	bool dual_mipi;
 	struct mipi_timing mipi_timing[2];
 	struct mutex rst_lock;
+	int dvi_mode;
+	int vic;
 	int tx_mode;
 	int dbg_en;
 	struct dentry *debug_dir;
 	struct gpio_desc *hdmirx_det_gpio;
 	bool last_mipi_status;
 	bool is_suspend;
+	bool is_10bit;
+	bool enable_csi1;
 };
 
 #define rk628_dbg(rk628, format, ...)	\

@@ -52,6 +52,25 @@ struct folio_batch;
 
 void page_writeback_init(void);
 
+/*
+ * This is a file-backed mapping, and is about to be memory mapped - invoke its
+ * mmap hook and safely handle error conditions. On error, VMA hooks will be
+ * mutated.
+ *
+ * @file: File which backs the mapping.
+ * @vma:  VMA which we are mapping.
+ *
+ * Returns: 0 if success, error otherwise.
+ */
+int mmap_file(struct file *file, struct vm_area_struct *vma);
+
+/*
+ * If the VMA has a close hook then close it, and since closing it might leave
+ * it in an inconsistent state which makes the use of any hooks suspect, clear
+ * them down by installing dummy empty hooks.
+ */
+void vma_close(struct vm_area_struct *vma);
+
 static inline void *folio_raw_mapping(struct folio *folio)
 {
 	unsigned long mapping = (unsigned long)folio->mapping;
@@ -370,6 +389,14 @@ extern void __putback_isolated_page(struct page *page, unsigned int order,
 				    int mt);
 extern void memblock_free_pages(struct page *page, unsigned long pfn,
 					unsigned int order);
+#ifdef CONFIG_ROCKCHIP_THUNDER_BOOT_DEFER_FREE_MEMBLOCK
+extern void __init rk_free_pages_core(struct page *page, unsigned int order);
+extern unsigned long __init rk_deferred_init_pages(struct zone *zone,
+						   unsigned long pfn,
+						   unsigned long end_pfn);
+extern bool __meminit rk_defer_init_hpages(int nid, unsigned long zone_idx,
+				unsigned long pfn, unsigned long end_pfn);
+#endif
 extern void __free_pages_core(struct page *page, unsigned int order);
 extern void prep_compound_page(struct page *page, unsigned int order);
 extern void post_alloc_hook(struct page *page, unsigned int order,

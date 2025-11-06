@@ -136,7 +136,7 @@ static void rockchip_pdm_v2_rxctrl(struct rk_pdm_v2_dev *pdm, int on)
 static int rockchip_pdm_v2_set_samplerate(struct rk_pdm_v2_dev *pdm, unsigned int samplerate)
 {
 	unsigned int upsamplerate, mclk, ratio, scale = 0;
-	int index, ret = 0;
+	int i, index, ret = 0;
 
 	index = get_pdm_v2_clkref(pdm, samplerate);
 	if (index < 0)
@@ -151,6 +151,17 @@ static int rockchip_pdm_v2_set_samplerate(struct rk_pdm_v2_dev *pdm, unsigned in
 	ret = clk_set_rate(pdm->clk_out, upsamplerate);
 	if (ret)
 		return ret;
+
+	if (pdm->version == RV1126B_PDM) {
+		/* calculate the data shift if not set by dts.
+		 * Set default phase offset of 180 degrees.
+		 */
+		mclk = clk_get_rate(pdm->clk);
+		if (pdm->data_shift[0] == 0) {
+			for (i = 0; i < PDM_V2_CHANNEL_MAX; i++)
+				pdm->data_shift[i] = (mclk / upsamplerate / 2) + 1;
+		}
+	}
 
 	ratio = upsamplerate / samplerate / 2;
 	switch (ratio) {
@@ -241,6 +252,7 @@ static int rockchip_pdm_v2_hw_params(struct snd_pcm_substream *substream,
 				   PDM_V2_FILT1_HPF_V2_FREQ_60);
 	}
 
+	rockchip_pdm_v2_set_samplerate(pdm, params_rate(params));
 	if (pdm->version == RV1126B_PDM) {
 		/* PDM data shift */
 		n = params_channels(params);
@@ -266,7 +278,6 @@ static int rockchip_pdm_v2_hw_params(struct snd_pcm_substream *substream,
 		}
 	}
 
-	rockchip_pdm_v2_set_samplerate(pdm, params_rate(params));
 	val = 0;
 	switch (params_format(params)) {
 	case SNDRV_PCM_FORMAT_S16_LE:

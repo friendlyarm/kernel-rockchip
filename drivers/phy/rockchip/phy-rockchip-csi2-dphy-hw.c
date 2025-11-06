@@ -650,6 +650,40 @@ static unsigned char get_lvds_data_width(u32 pixelformat)
 	}
 }
 
+static unsigned char get_lvds_data_width_rv1126b(u32 pixelformat)
+{
+	switch (pixelformat) {
+	/* csi raw8 */
+	case MEDIA_BUS_FMT_SBGGR8_1X8:
+	case MEDIA_BUS_FMT_SGBRG8_1X8:
+	case MEDIA_BUS_FMT_SGRBG8_1X8:
+	case MEDIA_BUS_FMT_SRGGB8_1X8:
+		return 0x1;
+	/* csi raw10 */
+	case MEDIA_BUS_FMT_SBGGR10_1X10:
+	case MEDIA_BUS_FMT_SGBRG10_1X10:
+	case MEDIA_BUS_FMT_SGRBG10_1X10:
+	case MEDIA_BUS_FMT_SRGGB10_1X10:
+		return 0x2;
+	/* csi raw12 */
+	case MEDIA_BUS_FMT_SBGGR12_1X12:
+	case MEDIA_BUS_FMT_SGBRG12_1X12:
+	case MEDIA_BUS_FMT_SGRBG12_1X12:
+	case MEDIA_BUS_FMT_SRGGB12_1X12:
+		return 0x3;
+	/* csi uyvy 422 */
+	case MEDIA_BUS_FMT_UYVY8_2X8:
+	case MEDIA_BUS_FMT_VYUY8_2X8:
+	case MEDIA_BUS_FMT_YUYV8_2X8:
+	case MEDIA_BUS_FMT_YVYU8_2X8:
+	case MEDIA_BUS_FMT_RGB888_1X24:
+		return 0x1;
+
+	default:
+		return 0x2;
+	}
+}
+
 static void csi2_dphy_hw_do_reset(struct csi2_dphy_hw *hw)
 {
 	if (hw->rsts_bulk)
@@ -678,7 +712,7 @@ static void csi2_dphy_config_dual_mode(struct csi2_dphy *dphy,
 
 	if (hw->lane_mode == LANE_MODE_FULL) {
 		val = !GRF_CSI2PHY_LANE_SEL_SPLIT;
-		if (dphy->phy_index < 3) {
+		if (hw->hw_idx == 0) {
 			write_grf_reg(hw, GRF_DPHY_CSI2PHY_DATALANE_EN,
 				      GENMASK(sensor->lanes - 1, 0));
 			write_grf_reg(hw, GRF_DPHY_CSI2PHY_CLKLANE_EN, 0x1);
@@ -879,10 +913,13 @@ static int csi2_dphy_hw_stream_on(struct csi2_dphy *dphy,
 			write_csi2_dphy_reg_mask(hw, CSI2PHY_CLK_CONTINUE_MODE,
 						0x30, CSI2PHY_CLK_CONTINUE_MODE_MASK);
 	} else {
-		if (!(pre_val & (0x1 << CSI2_DPHY_CTRL_CLKLANE_ENABLE_OFFSET_BIT)))
+		if (!(pre_val & (0x1 << CSI2_DPHY_CTRL_CLKLANE_ENABLE_OFFSET_BIT)) &&
+		    hw->drv_data->chip_id < CHIP_ID_RK3588)
 			val |= (0x1 << CSI2_DPHY_CTRL_CLKLANE_ENABLE_OFFSET_BIT);
 
 		if (dphy->phy_index % 3 == DPHY1) {
+			if (!(pre_val & (0x1 << CSI2_DPHY_CTRL_CLKLANE_ENABLE_OFFSET_BIT)))
+				val |= (0x1 << CSI2_DPHY_CTRL_CLKLANE_ENABLE_OFFSET_BIT);
 			val |= (GENMASK(sensor->lanes - 1, 0) <<
 				CSI2_DPHY_CTRL_DATALANE_ENABLE_OFFSET_BIT);
 			if (!(sensor->mbus.bus.mipi_csi2.flags &
@@ -988,7 +1025,10 @@ static int csi2_dphy_hw_stream_on(struct csi2_dphy *dphy,
 				write_csi2_dphy_reg(hw, CSI2PHY_PATH0_MODEL, 0x2);
 			} else {
 				write_csi2_dphy_reg(hw, CSI2PHY_PATH0_MODEL, 0x4);
-				lvds_width = get_lvds_data_width(sensor->format.code);
+				if (hw->drv_data->chip_id == CHIP_ID_RV1126B)
+					lvds_width = get_lvds_data_width_rv1126b(sensor->format.code);
+				else
+					lvds_width = get_lvds_data_width(sensor->format.code);
 				write_csi2_dphy_reg(hw, CSI2PHY_PATH0_LVDS_MODEL, (lvds_width << 4) | 0X0f);
 			}
 		} else {
@@ -996,7 +1036,10 @@ static int csi2_dphy_hw_stream_on(struct csi2_dphy *dphy,
 				write_csi2_dphy_reg(hw, CSI2PHY_PATH1_MODEL, 0x2);
 			} else {
 				write_csi2_dphy_reg(hw, CSI2PHY_PATH1_MODEL, 0x4);
-				lvds_width = get_lvds_data_width(sensor->format.code);
+				if (hw->drv_data->chip_id == CHIP_ID_RV1126B)
+					lvds_width = get_lvds_data_width_rv1126b(sensor->format.code);
+				else
+					lvds_width = get_lvds_data_width(sensor->format.code);
 				write_csi2_dphy_reg(hw, CSI2PHY_PATH1_LVDS_MODEL, (lvds_width << 4) | 0X0f);
 			}
 		}
@@ -1054,12 +1097,15 @@ static int csi2_dphy_hw_quick_stream_on(struct csi2_dphy *dphy,
 			CSI2_DPHY_CTRL_DATALANE_ENABLE_OFFSET_BIT) |
 			(0x1 << CSI2_DPHY_CTRL_CLKLANE_ENABLE_OFFSET_BIT);
 	} else {
-		if (!(pre_val & (0x1 << CSI2_DPHY_CTRL_CLKLANE_ENABLE_OFFSET_BIT)))
+		if (!(pre_val & (0x1 << CSI2_DPHY_CTRL_CLKLANE_ENABLE_OFFSET_BIT)) &&
+		    hw->drv_data->chip_id < CHIP_ID_RK3588)
 			val |= (0x1 << CSI2_DPHY_CTRL_CLKLANE_ENABLE_OFFSET_BIT);
 
-		if (dphy->phy_index % 3 == DPHY1)
+		if (dphy->phy_index % 3 == DPHY1) {
 			val |= (GENMASK(sensor->lanes - 1, 0) <<
 				CSI2_DPHY_CTRL_DATALANE_ENABLE_OFFSET_BIT);
+			val |= (0x1 << CSI2_DPHY_CTRL_CLKLANE_ENABLE_OFFSET_BIT);
+		}
 
 		if (dphy->phy_index % 3 == DPHY2) {
 			val |= (GENMASK(sensor->lanes - 1, 0) <<
@@ -1093,12 +1139,15 @@ static int csi2_dphy_hw_quick_stream_off(struct csi2_dphy *dphy,
 			CSI2_DPHY_CTRL_DATALANE_ENABLE_OFFSET_BIT) |
 			(0x1 << CSI2_DPHY_CTRL_CLKLANE_ENABLE_OFFSET_BIT);
 	} else {
-		if (!(pre_val & (0x1 << CSI2_DPHY_CTRL_CLKLANE_ENABLE_OFFSET_BIT)))
+		if (!(pre_val & (0x1 << CSI2_DPHY_CTRL_CLKLANE_ENABLE_OFFSET_BIT)) &&
+		    hw->drv_data->chip_id < CHIP_ID_RK3588)
 			val |= (0x1 << CSI2_DPHY_CTRL_CLKLANE_ENABLE_OFFSET_BIT);
 
-		if (dphy->phy_index % 3 == DPHY1)
+		if (dphy->phy_index % 3 == DPHY1) {
 			val |= (GENMASK(sensor->lanes - 1, 0) <<
 				CSI2_DPHY_CTRL_DATALANE_ENABLE_OFFSET_BIT);
+			val |= (0x1 << CSI2_DPHY_CTRL_CLKLANE_ENABLE_OFFSET_BIT);
+		}
 
 		if (dphy->phy_index % 3 == DPHY2) {
 			val |= (GENMASK(sensor->lanes - 1, 0) <<
@@ -1385,7 +1434,7 @@ int rockchip_csi2_dphy_hw_init(void)
 	return platform_driver_register(&rockchip_csi2_dphy_hw_driver);
 }
 
-#if defined(CONFIG_VIDEO_ROCKCHIP_THUNDER_BOOT_ISP) && !defined(CONFIG_INITCALL_ASYNC)
+#if defined(CONFIG_VIDEO_ROCKCHIP_THUNDER_BOOT_ISP)
 subsys_initcall(rockchip_csi2_dphy_hw_init);
 #else
 #if !defined(CONFIG_VIDEO_REVERSE_IMAGE)

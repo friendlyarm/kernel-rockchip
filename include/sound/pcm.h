@@ -1260,6 +1260,11 @@ static inline void snd_pcm_gettime(struct snd_pcm_runtime *runtime,
 	case SNDRV_PCM_TSTAMP_TYPE_MONOTONIC_RAW:
 		ktime_get_raw_ts64(tv);
 		break;
+#if defined(CONFIG_ARCH_ROCKCHIP) && defined(CONFIG_NO_GKI)
+	case SNDRV_PCM_TSTAMP_TYPE_BOOTTIME:
+		ktime_get_boottime_ts64(tv);
+		break;
+#endif
 	default:
 		ktime_get_real_ts64(tv);
 		break;
@@ -1435,6 +1440,8 @@ int snd_pcm_lib_mmap_iomem(struct snd_pcm_substream *substream, struct vm_area_s
 #define SNDRV_PCM_INFO_MMAP_IOMEM	0
 #define snd_pcm_lib_mmap_iomem	NULL
 #endif
+
+void snd_pcm_runtime_buffer_set_silence(struct snd_pcm_runtime *runtime);
 
 /**
  * snd_pcm_limit_isa_dma_size - Get the max size fitting with ISA DMA transfer

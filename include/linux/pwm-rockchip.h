@@ -99,8 +99,7 @@ enum rockchip_pwm_wave_update_mode {
 
 /**
  * struct rockchip_pwm_wave_config - wave generator config object
- * @duty_table: the wave table config of duty
- * @period_table: the wave table config of period
+ * @wave_table: the wave table config
  * @clk_src: the clk src selection in wave generator mode
  * @mem_clk_src: the memory clk src selection in wave generator mode
  * @width_mode: the width mode of wave table
@@ -121,8 +120,7 @@ enum rockchip_pwm_wave_update_mode {
  * @middle_hold: the time to stop at middle address
  */
 struct rockchip_pwm_wave_config {
-	struct rockchip_pwm_wave_table *duty_table;
-	struct rockchip_pwm_wave_table *period_table;
+	struct rockchip_pwm_wave_table *wave_table;
 	enum rockchip_pwm_clk_src_sel clk_src;
 	enum rockchip_pwm_clk_src_sel mem_clk_src;
 	enum rockchip_pwm_wave_table_width_mode width_mode;
@@ -243,6 +241,13 @@ int rockchip_pwm_set_biphasic(struct pwm_device *pwm, struct rockchip_pwm_biphas
  * @biphasic_res: biphasic counter result
  */
 int rockchip_pwm_get_biphasic_result(struct pwm_device *pwm, unsigned long *biphasic_res);
+
+/**
+ * rockchip_pwm_set_filter() - setup filter configuration
+ * @pwm: PWM device
+ * @filter_window_ns: filter window time in nanosecond
+ */
+int rockchip_pwm_set_filter(struct pwm_device *pwm, u64 filter_window_ns);
 #else
 static inline int rockchip_pwm_set_counter(struct pwm_device *pwm,
 					   enum rockchip_pwm_counter_input_sel input_sel,
@@ -285,6 +290,11 @@ static inline int rockchip_pwm_set_biphasic(struct pwm_device *pwm,
 
 static inline int rockchip_pwm_get_biphasic_result(struct pwm_device *pwm,
 						   unsigned long *biphasic_res)
+{
+	return 0;
+}
+
+static inline int rockchip_pwm_set_filter(struct pwm_device *pwm, u64 filter_window_ns)
 {
 	return 0;
 }

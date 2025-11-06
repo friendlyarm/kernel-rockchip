@@ -330,6 +330,14 @@
 	};
 };
 
+&dfi {
+	status = "disabled";
+};
+
+&dmc {
+	status = "disabled";
+};
+
 &max96712_dphy3_vcc1v2 {
 	vin-supply = <&vcc5v0_buck>;
 };
@@ -554,6 +562,14 @@
 	phy-supply = <&vcc5v0_host_usb30>;
 };
 
+&usbdp_phy0_u3 {
+	status = "disabled";
+};
+
+&usbdp_phy1_u3 {
+	status = "disabled";
+};
+
 &vdd_log_s0 {
 	regulator-state-mem {
 		regulator-on-in-suspend;
@@ -583,4 +599,3 @@
 &vcc5v0_host {
 	status = "disabled";
 };
-

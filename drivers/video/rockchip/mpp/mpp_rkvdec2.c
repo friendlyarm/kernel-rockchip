@@ -1492,7 +1492,7 @@ static int rkvdec_vdpu383_reset(struct mpp_dev *mpp)
 	mpp_debug_enter();
 
 	/* disable irq */
-	writel(link->info->ip_en_val & BIT(15), link->reg_base + link->info->ip_en_base);
+	writel(link->info->ip_en_val | BIT(15), link->reg_base + link->info->ip_en_base);
 	/* use ip reset to reset core and mmu */
 	writel(link->info->ip_reset_en, link->reg_base + link->info->ip_reset_base);
 	ret = readl_relaxed_poll_timeout(link->reg_base + link->info->status_base,
@@ -1571,6 +1571,16 @@ static struct mpp_hw_ops rkvdec_rk3576_hw_ops = {
 	.set_freq = rkvdec2_set_freq,
 	.reset = rkvdec_vdpu383_reset,
 	.hack_run = rk3576_workaround_run,
+};
+
+static struct mpp_hw_ops rkvdec_rv1126b_hw_ops = {
+	.init = rkvdec2_rk3576_init,
+	.exit = rkvdec2_rk3576_exit,
+	.clk_on = rkvdec2_clk_on,
+	.clk_off = rkvdec2_clk_off,
+	.get_freq = rkvdec2_get_freq,
+	.set_freq = rkvdec2_set_freq,
+	.reset = rkvdec_vdpu383_reset,
 };
 
 static struct mpp_dev_ops rkvdec_v2_dev_ops = {
@@ -1666,7 +1676,7 @@ static const struct mpp_dev_var rkvdec_rv1126b_data = {
 	.device_type = MPP_DEVICE_RKVDEC,
 	.hw_info = &rkvdec_vdpu384a_hw_info,
 	.trans_info = rkvdec_vdpu384a_trans,
-	.hw_ops = &rkvdec_rk3576_hw_ops,
+	.hw_ops = &rkvdec_rv1126b_hw_ops,
 	.dev_ops = &rkvdec_vdpu383_dev_ops,
 };
 
@@ -1998,6 +2008,7 @@ static int rkvdec2_probe_default(struct platform_device *pdev)
 
 	mpp = &dec->mpp;
 	platform_set_drvdata(pdev, mpp);
+	mpp->is_irq_startup = false;
 
 	if (pdev->dev.of_node) {
 		match = of_match_node(mpp_rkvdec2_dt_match, pdev->dev.of_node);
@@ -2035,6 +2046,7 @@ static int rkvdec2_probe_default(struct platform_device *pdev)
 	pm_runtime_set_autosuspend_delay(dev, 2000);
 	pm_runtime_use_autosuspend(dev);
 
+	mpp->is_irq_startup = true;
 	mpp->session_max_buffers = RKVDEC_SESSION_MAX_BUFFERS;
 	rkvdec2_procfs_init(mpp);
 	if (dec->link_dec && (mpp->task_capacity > 1))

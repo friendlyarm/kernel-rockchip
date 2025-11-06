@@ -70,6 +70,7 @@ enum adc_sort_mode {
 
 struct phy_config {
 	unsigned int bias;
+	unsigned int offset;
 };
 
 /**
@@ -272,6 +273,8 @@ struct rockchip_thermal_data {
 
 #define TSADC_DATA_SIGN_BIT			BIT(16)
 #define TSADC_DATA_NEGATIVE			0xfffe0000
+#define TSADC_TEMP_DEBOUNCE			5000
+#define TSADC_TEMP_CRITICAL			115000
 
 #define TSADCV2_HIGHT_INT_DEBOUNCE_COUNT	4
 #define TSADCV2_HIGHT_TSHUT_DEBOUNCE_COUNT	4
@@ -335,20 +338,18 @@ struct rockchip_thermal_data {
 
 #define RV1126B_GRF_TSADC_CON0			0x50
 #define RV1126B_GRF_TSADC_CON1			0x54
+#define RV1126B_GRF_TSADC_CON4			0x60
 #define RV1126B_GRF_TSADC_CON6			0x68
 #define RV1126B_GRF_TSADC_ST1			0x114
-#define RV1126B_CH_EN				0x300
-#define RV1126B_CH_EN_MASK			(0x300 << 16)
 #define RV1126B_UNLOCK_VALUE			0xa5
 #define RV1126B_UNLOCK_VALUE_MASK		(0xff << 16)
 #define RV1126B_UNLOCK_TRIGGER			BIT(8)
 #define RV1126B_UNLOCK_TRIGGER_MASK		(BIT(8) << 16)
-#define RV1126B_DEF_WIDTH			0x00010001
-#define RV1126B_TARGET_WIDTH			24000
-#define RV1126B_DEF_BIAS			32
+#define RV1126B_MAX_BIAS			0x7f
 #define RV1126B_BIAS_MASK			(0x7f << 16)
-#define RV1126B_HW_CTRL				BIT(15)
-#define RV1126B_HW_CTRL_MASK			(BIT(15) << 16)
+#define RV1126B_MAX_OFFSET			0xffff
+#define RV1126B_OFFSET_MASK			(0xffff << 16)
+#define RV1126B_CTRL_MASK			(0x8078 << 16)
 
 #define GRF_SARADC_TESTBIT_ON			(0x10001 << 2)
 #define GRF_TSADC_TESTBIT_H_ON			(0x10001 << 2)
@@ -563,6 +564,7 @@ static const struct tsadc_table rk3328_code_table[] = {
 	{296, -40000},
 	{304, -35000},
 	{313, -30000},
+	{322, -25000},
 	{331, -20000},
 	{340, -15000},
 	{349, -10000},
@@ -1406,18 +1408,39 @@ static int rk_tsadcv4_get_temp(const struct chip_tsadc_table *table,
 	return rk_tsadcv2_code_to_temp(table, val, temp);
 }
 
+static int rk_tsadc_limit_amplitude(int new_temp, bool enable)
+{
+	static int last_temp = INT_MAX;
+
+	/* Reinit last temp when phy init */
+	if (!enable) {
+		last_temp = INT_MAX;
+		return 0;
+	}
+
+	if (last_temp != INT_MAX) {
+		if (abs(new_temp - last_temp) > TSADC_TEMP_DEBOUNCE) {
+			if (new_temp > last_temp)
+				new_temp = last_temp + TSADC_TEMP_DEBOUNCE;
+			else
+				new_temp = last_temp - TSADC_TEMP_DEBOUNCE;
+		}
+	} else {
+		/* Limit the first temperature */
+		if (new_temp >= TSADC_TEMP_CRITICAL)
+			new_temp = TSADC_TEMP_CRITICAL - TSADC_TEMP_DEBOUNCE;
+	}
+	last_temp = new_temp;
+
+	return new_temp;
+}
+
 static int rk_tsadcv5_get_temp(const struct chip_tsadc_table *table,
 			       int chn, void __iomem *regs, int *temp)
 {
 	u32 val;
 
-	if (chn == 0)
-		val = readl_relaxed(regs + TSADCV3_DATA(1));
-	else if (chn == 1)
-		val = readl_relaxed(regs + TSADCV3_DATA(0));
-	else
-		return -EINVAL;
-
+	val = readl_relaxed(regs + TSADCV3_DATA(chn));
 	*temp = val & TSADCV6_DATA_MASK;
 	if (val & TSADC_DATA_SIGN_BIT)
 		*temp |= TSADC_DATA_NEGATIVE;
@@ -1426,6 +1449,8 @@ static int rk_tsadcv5_get_temp(const struct chip_tsadc_table *table,
 		*temp = MIN_TEMP;
 	else if (*temp > MAX_TEMP)
 		*temp = MAX_TEMP;
+
+	*temp = rk_tsadc_limit_amplitude(*temp, true);
 
 	return 0;
 }
@@ -1690,27 +1715,31 @@ static void rv1126b_tsadc_phy_init(struct device *dev, struct regmap *grf,
 				   void __iomem *reg, struct phy_config *phy_cfg)
 {
 	u32 val = 0;
-	u32 width = 0;
 
 	if (!phy_cfg->bias) {
-		phy_cfg->bias = RV1126B_DEF_BIAS;
-		regmap_read(grf, RV1126B_GRF_TSADC_ST1, &val);
-		if (val && val != RV1126B_DEF_WIDTH) {
-			width = (val & 0x0000ffff) + ((val & 0xffff0000) >> 16);
-			phy_cfg->bias = width * RV1126B_DEF_BIAS / RV1126B_TARGET_WIDTH;
-		}
-		dev_info(dev, "width=0x%x, bias=0x%x\n", val, phy_cfg->bias);
+		regmap_read(grf, RV1126B_GRF_TSADC_CON6, &val);
+		phy_cfg->bias = val & RV1126B_MAX_BIAS;
+	} else {
+		regmap_write(grf, RV1126B_GRF_TSADC_CON6,
+			     phy_cfg->bias | RV1126B_BIAS_MASK);
 	}
-	regmap_write(grf, RV1126B_GRF_TSADC_CON6,
-		     phy_cfg->bias | RV1126B_BIAS_MASK);
-	regmap_write(grf, RV1126B_GRF_TSADC_CON6,
-		     RV1126B_CH_EN | RV1126B_CH_EN_MASK);
-	regmap_write(grf, RV1126B_GRF_TSADC_CON0, RV1126B_HW_CTRL_MASK);
+	if (!phy_cfg->offset) {
+		regmap_read(grf, RV1126B_GRF_TSADC_CON4, &val);
+		phy_cfg->offset = val & RV1126B_MAX_OFFSET;
+	} else {
+		regmap_write(grf, RV1126B_GRF_TSADC_CON4,
+			     phy_cfg->offset | RV1126B_OFFSET_MASK);
+	}
+	regmap_read(grf, RV1126B_GRF_TSADC_ST1, &val);
+	dev_info(dev, "width=0x%x, bias=0x%x, offset=0x%x\n", val, phy_cfg->bias,
+		 phy_cfg->offset);
+	regmap_write(grf, RV1126B_GRF_TSADC_CON0, RV1126B_CTRL_MASK);
 	regmap_write(grf, RV1126B_GRF_TSADC_CON1,
 		     RV1126B_UNLOCK_VALUE | RV1126B_UNLOCK_VALUE_MASK);
 	regmap_write(grf, RV1126B_GRF_TSADC_CON1,
 		     RV1126B_UNLOCK_TRIGGER | RV1126B_UNLOCK_TRIGGER_MASK);
 	regmap_write(grf, RV1126B_GRF_TSADC_CON1, RV1126B_UNLOCK_TRIGGER_MASK);
+	rk_tsadc_limit_amplitude(0, false);
 }
 
 static const struct rockchip_tsadc_chip px30_tsadc_data = {
@@ -1833,9 +1862,8 @@ static const struct rockchip_tsadc_chip rv1126_tsadc_data = {
 };
 
 static const struct rockchip_tsadc_chip rv1126b_tsadc_data = {
-	.chn_id = {0, 1}, /* cpu, npu */
-	.chn_num = 2, /* two channels for tsadc */
-	.conversion_time = 2000, /* us */
+	.chn_id[SENSOR_CPU] = 0, /* cpu sensor is channel 0 */
+	.chn_num = 1, /* one channel for tsadc */
 	.tshut_mode = TSHUT_MODE_CRU, /* default TSHUT via CRU */
 	.tshut_polarity = TSHUT_LOW_ACTIVE, /* default TSHUT LOW ACTIVE */
 	.tshut_temp = 95000,
@@ -2704,7 +2732,7 @@ static int rockchip_thermal_probe(struct platform_device *pdev)
 	if (IS_ERR(thermal->regs))
 		return PTR_ERR(thermal->regs);
 
-	thermal->reset = devm_reset_control_array_get(&pdev->dev, false, false);
+	thermal->reset = devm_reset_control_array_get_optional_exclusive(&pdev->dev);
 	if (IS_ERR(thermal->reset)) {
 		if (PTR_ERR(thermal->reset) != -EPROBE_DEFER)
 			dev_err(&pdev->dev, "failed to get tsadc reset lines\n");

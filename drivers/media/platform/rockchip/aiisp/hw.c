@@ -21,6 +21,7 @@
 #include <media/videobuf2-cma-sg.h>
 #include <media/videobuf2-dma-sg.h>
 #include <soc/rockchip/rockchip_iommu.h>
+#include <soc/rockchip/rockchip_aiisp.h>
 
 #include "regs.h"
 #include "hw.h"
@@ -68,10 +69,8 @@ static irqreturn_t hw_irq_hdl(int irq, void *ctx)
 					id = i;
 				}
 			}
-			spin_unlock(&hw_dev->hw_lock);
 
 			if (max > 0) {
-				spin_lock(&hw_dev->hw_lock);
 				hw_dev->is_idle = false;
 				hw_dev->cur_dev_id = id;
 				aidev = hw_dev->aidev[hw_dev->cur_dev_id];
@@ -81,7 +80,6 @@ static irqreturn_t hw_irq_hdl(int irq, void *ctx)
 					hw_dev->cur_dev_id, max);
 				rkaiisp_trigger(aidev);
 			} else {
-				spin_lock(&hw_dev->hw_lock);
 				hw_dev->is_idle = true;
 				spin_unlock(&hw_dev->hw_lock);
 			}
@@ -119,10 +117,11 @@ static int rkaiisp_register_irq(struct rkaiisp_hw_dev *hw_dev)
 	return 0;
 }
 
-int rkaiisp_ispidx_queue(int dev_id, struct rkisp_aiisp_st *idxbuf)
+int rkaiisp_cfg_aiynr_yuvbuf(struct aiisp_aiynr_ybuf_cfg *buf_cfg)
 {
 	struct rkaiisp_hw_dev *hw_dev = rkaiisp_hwdev;
 	struct rkaiisp_device *aidev = NULL;
+	int dev_id;
 	int i;
 
 	if (!hw_dev) {
@@ -130,9 +129,16 @@ int rkaiisp_ispidx_queue(int dev_id, struct rkisp_aiisp_st *idxbuf)
 		return -EINVAL;
 	}
 
+	if (!buf_cfg) {
+		pr_err("Input buf_cfg is NULL!");
+		return -EINVAL;
+	}
+
+	dev_id = buf_cfg->dev_id;
 	for (i = 0; i < hw_dev->dev_num; i++) {
 		if (hw_dev->aidev[i]) {
-			if ((hw_dev->aidev[i]->is_hw_link) && hw_dev->aidev[i]->dev_id == dev_id) {
+			if ((hw_dev->aidev[i]->is_hw_link) &&
+			     hw_dev->aidev[i]->dev_id == dev_id) {
 				aidev = hw_dev->aidev[i];
 				break;
 			}
@@ -144,14 +150,9 @@ int rkaiisp_ispidx_queue(int dev_id, struct rkisp_aiisp_st *idxbuf)
 		return -EINVAL;
 	}
 
-	if (aidev->exemode != BOTHEVENT_TO_AIQ) {
-		pr_err("aidev %d exemode(%d) is not right!", dev_id, aidev->exemode);
-		return -EINVAL;
-	}
-
-	return rkaiisp_queue_ispbuf(aidev, idxbuf);
+	return rkaiisp_set_aiynr_ybuf(aidev, buf_cfg);
 }
-EXPORT_SYMBOL(rkaiisp_ispidx_queue);
+EXPORT_SYMBOL(rkaiisp_cfg_aiynr_yuvbuf);
 
 static const char * const rv1126b_clks[] = {
 	"clk_aiisp_core",

@@ -80,6 +80,7 @@
 #define VOP_FEATURE_POST_CSC		BIT(9)
 #define VOP_FEATURE_POST_FRC_V2		BIT(10)
 #define VOP_FEATURE_POST_SHARP		BIT(11)
+#define VOP_FEATURE_HW_CURSOR		BIT(12)
 
 #define VOP_FEATURE_OUTPUT_10BIT	VOP_FEATURE_OUTPUT_RGB10
 
@@ -103,18 +104,12 @@
 #define WIN_FEATURE_MULTI_AREA		BIT(7)
 #define WIN_FEATURE_Y2R_13BIT_DEPTH	BIT(8)
 #define WIN_FEATURE_DCI			BIT(9)
+#define WIN_FEATURE_HW_CURSOR		BIT(10)
 
 
 #define VOP2_SOC_VARIANT		4
 
 #define ROCKCHIP_DSC_PPS_SIZE_BYTE	88
-
-enum vop_vp_id {
-	ROCKCHIP_VOP_VP0 = 0,
-	ROCKCHIP_VOP_VP1,
-	ROCKCHIP_VOP_VP2,
-	ROCKCHIP_VOP_VP3,
-};
 
 enum bcsh_out_mode {
 	BCSH_OUT_MODE_BLACK,
@@ -457,17 +452,25 @@ struct vop_ctrl {
 	struct vop_reg mcu_bypass;
 	struct vop_reg mcu_type;
 	struct vop_reg mcu_rw_bypass_port;
+	struct vop_reg mcu_force_rdn;
+	struct vop_reg mcu_data_map_mode;
 
 	/* bt1120 */
 	struct vop_reg bt1120_uv_swap;
 	struct vop_reg bt1120_yc_swap;
 	struct vop_reg bt1120_en;
+	struct vop_reg bt1120_data_map_mode;
 
 	/* bt656 */
 	struct vop_reg bt656_en;
+	struct vop_reg bt656_data_map_mode;
 
 	struct vop_reg reg_done_frm;
 	struct vop_reg cfg_done;
+
+	struct vop_reg edpi_wms_fs;
+	struct vop_reg edpi_ctrl_mode;
+	struct vop_reg edpi_te_en;
 
 	/* ebc vop */
 	struct vop_reg enable;
@@ -697,7 +700,8 @@ enum vop_hdr_format {
 };
 
 struct post_csc_convert_mode {
-	enum drm_color_encoding color_encoding;
+	enum drm_color_encoding intput_color_encoding;
+	enum drm_color_encoding output_color_encoding;
 	bool is_input_yuv;
 	bool is_output_yuv;
 	bool is_input_full_range;
@@ -908,10 +912,13 @@ struct vop2_win_regs {
 	struct vop_reg axi_yrgb_id;
 	struct vop_reg axi_uv_id;
 	struct vop_reg scale_engine_num;
+	struct vop_reg alpha_map_en;
+	struct vop_reg alpha_map_val;
 };
 
 struct vop2_video_port_regs {
 	struct vop_reg cfg_done;
+	struct vop_reg sys_cfg_done;
 	struct vop_reg overlay_mode;
 	struct vop_reg dsp_background;
 	struct vop_reg port_mux;
@@ -998,6 +1005,7 @@ struct vop2_video_port_regs {
 	struct vop_reg hdr_dst_color_ctrl;
 	struct vop_reg hdr_src_alpha_ctrl;
 	struct vop_reg hdr_dst_alpha_ctrl;
+	struct vop_reg port_extra_en;
 	struct vop_reg bg_mix_ctrl;
 	struct vop_reg layer_sel;
 
@@ -1090,6 +1098,9 @@ struct vop2_video_port_regs {
 	/* clk calc*/
 	struct vop_reg calc_clk_en;
 	struct vop_reg calc_dclk_cnt;
+
+	/* dsp vcnt */
+	struct vop_reg dsp_vcnt;
 };
 
 struct vop2_power_domain_regs {
@@ -1232,6 +1243,7 @@ struct vop2_win_data {
 	uint8_t axi_uv_id;
 	uint8_t possible_vp_mask;
 	uint8_t dci_rid_id;
+	uint8_t reg_done_bit;
 
 	uint32_t base;
 	enum drm_plane_type type;
@@ -1244,6 +1256,8 @@ struct vop2_win_data {
 	const struct vop2_win_regs *regs;
 	const struct vop2_win_regs **area;
 	unsigned int area_size;
+	struct vop_rect max_input;
+	struct vop_rect max_output;
 
 	/*
 	 * vertical/horizontal scale up/down filter mode
@@ -1317,6 +1331,7 @@ struct vop3_ovl_regs {
 	const struct vop3_ovl_mix_regs *layer_mix_regs;
 	const struct vop3_ovl_mix_regs *hdr_mix_regs;
 	const struct vop3_ovl_mix_regs *extra_mix_regs;
+	const struct vop3_ovl_mix_regs *cursor_mix_regs;
 };
 
 struct vop2_video_port_data {
@@ -1337,6 +1352,7 @@ struct vop2_video_port_data {
 	const u8 hdr_mix_dly;
 	const u8 win_dly;
 	const u8 pixel_rate;
+	const u8 cursor_dly;
 	const struct vop_intr *intr;
 	const struct vop_urgency *urgency;
 	const struct vop_hdr_table *hdr_table;
@@ -1433,6 +1449,8 @@ struct vop_wb_data {
 	struct vop_rect max_output;
 	const struct vop_wb_regs *regs;
 	uint32_t fifo_depth;
+	uint16_t axi_yrgb_id;
+	uint16_t axi_uv_id;
 };
 
 struct vop_data {
@@ -1460,6 +1478,7 @@ struct vop_data {
 struct vop2_ctrl {
 	struct vop_reg cfg_done_en;
 	struct vop_reg wb_cfg_done;
+	struct vop_reg win_cfg_done;
 	struct vop_reg auto_gating_en;
 	struct vop_reg aclk_pre_auto_gating_en;
 	struct vop_reg dma_finish_mode;
@@ -1520,7 +1539,6 @@ struct vop2_ctrl {
 	/* This will be reference by win_phy_id */
 	struct vop_reg win_vp_id[16];
 	struct vop_reg win_dly[16];
-	struct vop_reg win_alpha_map[16];
 
 	/* connector mux */
 	struct vop_reg rgb_mux;

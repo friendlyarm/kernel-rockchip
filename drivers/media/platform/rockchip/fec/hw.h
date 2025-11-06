@@ -70,6 +70,10 @@ struct rkfec_hw_dev {
 	bool is_dma_sg_ops;
 	bool is_shutdown;
 	bool is_suspend;
+	enum rkfec_fec_ver fec_ver;
+
+	void (*soft_reset)(struct rkfec_hw_dev *hw);
+	int (*set_clk)(struct clk *clk, unsigned long rate);
 };
 
 #ifndef IS_LINUX_VERSION_AT_LEAST_6_1

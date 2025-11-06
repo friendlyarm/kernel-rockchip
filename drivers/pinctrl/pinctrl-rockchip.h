@@ -183,6 +183,7 @@
 #define RK_GPIO4_D6	158
 #define RK_GPIO4_D7	159
 
+#define RK_GPIO_BANK_MAX_PIN		32
 #define RK_GPIO_IRQ_MAX_NUM		4
 #define RK_GPIO_EXP_IRQ_MAX_PIN_NUM	2
 
@@ -335,6 +336,7 @@ struct rockchip_pin_bank {
 	struct regmap			*regmap_pull;
 	struct clk			*clk;
 	struct clk			*db_clk;
+	unsigned long			db_clk_bitmap[BITS_TO_LONGS(RK_GPIO_BANK_MAX_PIN)];
 	int				irq[RK_GPIO_IRQ_MAX_NUM];
 	u32				irq_pins[RK_GPIO_IRQ_MAX_NUM];
 	int				irq_pin_id[RK_GPIO_IRQ_MAX_NUM][RK_GPIO_EXP_IRQ_MAX_PIN_NUM];

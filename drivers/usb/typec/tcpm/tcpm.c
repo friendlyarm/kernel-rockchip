@@ -2392,16 +2392,22 @@ static int tcpm_set_auto_vbus_discharge_threshold(struct tcpm_port *port,
 						  enum typec_pwr_opmode mode, bool pps_active,
 						  u32 requested_vbus_voltage)
 {
+	u32 voltage;
 	int ret;
 
 	if (!port->tcpc->set_auto_vbus_discharge_threshold)
 		return 0;
 
-	ret = port->tcpc->set_auto_vbus_discharge_threshold(port->tcpc, mode, pps_active,
-							    requested_vbus_voltage);
+	if (mode == TYPEC_PWR_MODE_PD && pps_active)
+		voltage = port->pps_data.min_volt;
+	else
+		voltage = requested_vbus_voltage;
+
+	ret = port->tcpc->set_auto_vbus_discharge_threshold(port->tcpc, mode, pps_active, voltage);
 	tcpm_log_force(port,
-		       "set_auto_vbus_discharge_threshold mode:%d pps_active:%c vbus:%u ret:%d",
-		       mode, pps_active ? 'y' : 'n', requested_vbus_voltage, ret);
+		       "set_auto_vbus_discharge_threshold mode:%d pps_active:%c vbus:%u pps_apdo_min_volt:%u ret:%d",
+		       mode, pps_active ? 'y' : 'n', requested_vbus_voltage,
+		       port->pps_data.min_volt, ret);
 
 	return ret;
 }
@@ -4145,7 +4151,7 @@ static void run_state_machine(struct tcpm_port *port)
 			port->caps_count = 0;
 			port->pd_capable = true;
 			tcpm_set_state_cond(port, SRC_SEND_CAPABILITIES_TIMEOUT,
-					    PD_T_SEND_SOURCE_CAP);
+					    PD_T_SENDER_RESPONSE);
 		}
 		break;
 	case SRC_SEND_CAPABILITIES_TIMEOUT:
@@ -4865,7 +4871,7 @@ static void run_state_machine(struct tcpm_port *port)
 		tcpm_set_auto_vbus_discharge_threshold(port, TYPEC_PWR_MODE_USB,
 						       port->pps_data.active, 0);
 		tcpm_set_charge(port, false);
-		tcpm_set_state(port, hard_reset_state(port), timer_val_msecs);
+		tcpm_set_state(port, ERROR_RECOVERY, timer_val_msecs);
 		break;
 	case PR_SWAP_SNK_SRC_SOURCE_ON:
 		tcpm_enable_auto_vbus_discharge(port, true);
@@ -5209,7 +5215,7 @@ static void _tcpm_cc_change(struct tcpm_port *port, enum typec_cc_status cc1,
 	case SNK_TRY_WAIT_DEBOUNCE:
 		if (!tcpm_port_is_sink(port)) {
 			port->max_wait = 0;
-			tcpm_set_state(port, SRC_TRYWAIT, 0);
+			tcpm_set_state(port, SRC_TRYWAIT, PD_T_PD_DEBOUNCE);
 		}
 		break;
 	case SRC_TRY_WAIT:
@@ -6408,7 +6414,7 @@ static int tcpm_fw_get_caps(struct tcpm_port *port, struct fwnode_handle *fwnode
 	unsigned int nr_src_pdo, nr_snk_pdo;
 	const char *opmode_str;
 	u32 *src_pdo, *snk_pdo;
-	u32 uw, frs_current;
+	u32 uw, frs_current, pd_revision;
 	int ret = 0, i;
 	int mode;
 
@@ -6439,12 +6445,8 @@ static int tcpm_fw_get_caps(struct tcpm_port *port, struct fwnode_handle *fwnode
 	port->port_type = port->typec_caps.type;
 	port->pd_supported = !fwnode_property_read_bool(fwnode, "pd-disable");
 
-	if (port->pd_supported) {
-		u32 pd_revision;
-
-		ret = fwnode_property_read_u32(fwnode, "pd-revision", &pd_revision);
-		port->typec_caps.pd_revision = !ret ? pd_revision & 0xffff : 0x0300;
-	}
+	ret = fwnode_property_read_u32(fwnode, "pd-revision", &pd_revision);
+	port->typec_caps.pd_revision = !ret ? pd_revision & 0xffff : 0x0300;
 
 	port->slow_charger_loop = fwnode_property_read_bool(fwnode, "slow-charger-loop");
 	port->self_powered = fwnode_property_read_bool(fwnode, "self-powered");

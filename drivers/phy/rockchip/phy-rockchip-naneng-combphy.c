@@ -1512,6 +1512,10 @@ static int rv1126b_combphy_cfg(struct rockchip_combphy_priv *priv)
 		/* Set Rx squelch input filler bandwidth */
 		writel(0x0e, priv->mmio + (0x14 << 2));
 
+		/* Set Full Txswing and Txmargin 1200mV and -6dB De-emphasis */
+		regmap_write(priv->phy_grf, 0x1800c, GENMASK(18, 16) | 0x0007);
+		regmap_write(priv->phy_grf, 0x18004, GENMASK(26, 21) | 0x0100);
+
 		rockchip_combphy_param_write(priv->phy_grf, &cfg->pipe_sel_usb, true);
 		rockchip_combphy_param_write(priv->phy_grf, &cfg->pipe_txcomp_sel, false);
 		rockchip_combphy_param_write(priv->phy_grf, &cfg->pipe_txelec_sel, false);
@@ -1629,7 +1633,21 @@ static struct platform_driver rockchip_combphy_driver = {
 		.of_match_table = rockchip_combphy_of_match,
 	},
 };
+#ifdef CONFIG_INITCALL_ASYNC
+static int __init rockchip_combphy_driver_init(void)
+{
+	return platform_driver_register(&rockchip_combphy_driver);
+}
+fs_initcall(rockchip_combphy_driver_init);
+
+static void __exit rockchip_combphy_driver_exit(void)
+{
+	platform_driver_unregister(&rockchip_combphy_driver);
+}
+module_exit(rockchip_combphy_driver_exit);
+#else
 module_platform_driver(rockchip_combphy_driver);
+#endif
 
 MODULE_DESCRIPTION("Rockchip NANENG COMBPHY driver");
 MODULE_LICENSE("GPL v2");

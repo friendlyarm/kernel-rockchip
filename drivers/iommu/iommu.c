@@ -193,7 +193,11 @@ static int __init iommu_subsys_init(void)
 
 	return 0;
 }
+#ifdef CONFIG_INITCALL_ASYNC
+postcore_initcall_sync(iommu_subsys_init);
+#else
 subsys_initcall(iommu_subsys_init);
+#endif
 
 static int remove_iommu_group(struct device *dev, void *data)
 {

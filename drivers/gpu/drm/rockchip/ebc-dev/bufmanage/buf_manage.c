@@ -66,7 +66,7 @@ int ebc_drop_one_dsp_buf(void)
 		if (ebc_buf_info.dsp_buf_list->nb_elt > 0) {
 			temp_pos = ebc_buf_info.dsp_buf_list->nb_elt - 1;
 			temp_buf = (struct ebc_buf_s *)buf_list_get(ebc_buf_info.dsp_buf_list, temp_pos);
-			if (temp_buf->dropable == 0) {
+			if (temp_buf->undroppable == 0) {
 				buf_list_remove(ebc_buf_info.dsp_buf_list, temp_pos);
 				ebc_buf_release(temp_buf);
 				mutex_unlock(&ebc_buf_info.dsp_buf_lock);
@@ -165,6 +165,22 @@ struct ebc_buf_s *ebc_dsp_buf_get(void)
 	mutex_unlock(&ebc_buf_info.dsp_buf_lock);
 
 	return buf;
+}
+
+int ebc_dsp_buf_next_mode(void)
+{
+	struct ebc_buf_s *buf = NULL;
+	int mode = -1;
+
+	mutex_lock(&ebc_buf_info.dsp_buf_lock);
+	if (ebc_buf_info.dsp_buf_list && (ebc_buf_info.dsp_buf_list->nb_elt > 0)) {
+		buf = (struct ebc_buf_s *)buf_list_get(ebc_buf_info.dsp_buf_list, 0);
+		mode = buf->buf_mode;
+		buf->undroppable = 1;
+	}
+	mutex_unlock(&ebc_buf_info.dsp_buf_lock);
+
+	return mode;
 }
 
 struct ebc_buf_s *ebc_empty_osd_buf_get(void)

@@ -567,16 +567,19 @@ static int rknpu_release(struct inode *inode, struct file *file)
 			"Fd close free rknpu_obj: %#llx, rknpu_obj->dma_addr: %#llx\n",
 			(__u64)(uintptr_t)entry, (__u64)entry->dma_addr);
 
-		vunmap(entry->kv_addr);
-		entry->kv_addr = NULL;
-
-		if (!entry->owner) {
-			dma_buf_put(entry->dmabuf);
-		} else {
-			dma_buf_unmap_attachment(entry->attachment, entry->sgt,
-						 DMA_BIDIRECTIONAL);
-			dma_buf_detach(entry->dmabuf, entry->attachment);
+		if (entry->kv_addr) {
+			struct iosys_map map =
+				IOSYS_MAP_INIT_VADDR(entry->kv_addr);
+			dma_buf_vunmap(entry->dmabuf, &map);
+			entry->kv_addr = NULL;
 		}
+
+		dma_buf_unmap_attachment(entry->attachment, entry->sgt,
+					 DMA_BIDIRECTIONAL);
+		dma_buf_detach(entry->dmabuf, entry->attachment);
+
+		if (!entry->owner)
+			dma_buf_put(entry->dmabuf);
 
 		list_del(&entry->head);
 		kfree(entry);
@@ -1420,6 +1423,7 @@ static int rknpu_probe(struct platform_device *pdev)
 	rknpu_dev->heap = rk_dma_heap_find("rk-dma-heap-cma");
 	if (!rknpu_dev->heap) {
 		LOG_DEV_ERROR(dev, "failed to find cma heap\n");
+		misc_deregister(&rknpu_dev->miscdev);
 		return -ENOMEM;
 	}
 	rk_dma_heap_set_dev(dev);

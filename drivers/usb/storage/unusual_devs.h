@@ -255,6 +255,13 @@ UNUSUAL_DEV(  0x0421, 0x06aa, 0x1110, 0x1110,
 		USB_SC_DEVICE, USB_PR_DEVICE, NULL,
 		US_FL_MAX_SECTORS_64 ),
 
+/* Added by Lubomir Rintel <lkundrak@v3.sk>, a very fine chap */
+UNUSUAL_DEV(  0x0421, 0x06c2, 0x0000, 0x0406,
+		"Nokia",
+		"Nokia 208",
+		USB_SC_DEVICE, USB_PR_DEVICE, NULL,
+		US_FL_MAX_SECTORS_64 ),
+
 #ifdef NO_SDDR09
 UNUSUAL_DEV(  0x0436, 0x0005, 0x0100, 0x0100,
 		"Microtech",
@@ -2379,6 +2386,12 @@ UNUSUAL_DEV(  0x3340, 0xffff, 0x0000, 0x0000,
 		"Mio DigiWalker USB Sync",
 		USB_SC_DEVICE,USB_PR_DEVICE,NULL,
 		US_FL_MAX_SECTORS_64 ),
+
+UNUSUAL_DEV(  0x346d, 0x5678, 0x0000, 0xffff,
+		"Teclast",
+		"CoolFlash",
+		USB_SC_DEVICE, USB_PR_DEVICE, NULL,
+		US_FL_GO_SLOW | US_FL_MAX_SECTORS_64 | US_FL_IGNORE_RESIDUE ),
 
 /* Reported by Cyril Roelandt <tipecaml@gmail.com> */
 UNUSUAL_DEV(  0x357d, 0x7788, 0x0114, 0x0114,

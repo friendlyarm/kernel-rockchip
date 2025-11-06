@@ -305,8 +305,8 @@
 			15 00 02 d2 32
 			15 00 02 d3 00
 			39 00 04 ff 98 81 00
-			05 00 01 11
-			05 01 01 29
+			05 96 01 11
+			05 14 01 29
 		];
 
 		display-timings {
@@ -383,6 +383,17 @@
 	status = "okay";
 };
 
+&rgb {
+	/*
+	 * RV1126 compatible pin output mode 0.
+	 *
+	 * MCU: ROCKCHIP_MCU_DATA_MAP_DATA_1x24
+	 * BT1120: ROCKCHIP_BT1120_DATA_MAP_DATA_PADLO
+	 * BT656: ROCKCHIP_BT656_DATA_MAP_PADLO
+	 */
+	rockchip,data-map-mode = <0>;
+};
+
 &rkdvbm {
 	status = "okay";
 };
@@ -392,7 +403,7 @@
 };
 
 &rknpu_mmu {
-	status = "disabled";
+	status = "okay";
 };
 
 &rkvdec {
@@ -441,10 +452,6 @@
 };
 
 &usb2phy_otg {
-	status = "okay";
-};
-
-&usb3phy {
 	status = "okay";
 };
 

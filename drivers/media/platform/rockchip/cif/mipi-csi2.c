@@ -234,10 +234,39 @@ static void csi2_enable(struct csi2_hw *csi2_hw,
 	write_csihost_reg(base, CSIHOST_RESETN, 1);
 }
 
+static int csi2_hw_start(struct csi2_hw *csi2_hw, enum host_type_t host_type)
+{
+	int ret = 0;
+
+	if (atomic_inc_return(&csi2_hw->stream_count) > 1)
+		return ret;
+	csi2_hw_do_reset(csi2_hw);
+	ret = csi2_enable_clks(csi2_hw);
+	if (ret) {
+		dev_err(csi2_hw->dev, "%s: enable clks failed, %s\n",
+			 __func__, csi2_hw->dev_name);
+		return ret;
+	}
+	enable_irq(csi2_hw->irq1);
+	enable_irq(csi2_hw->irq2);
+	csi2_enable(csi2_hw, host_type);
+	return ret;
+}
+
+static void csi2_hw_stop(struct csi2_hw *csi2_hw)
+{
+	if (atomic_dec_return(&csi2_hw->stream_count) > 0)
+		return;
+	disable_irq(csi2_hw->irq1);
+	disable_irq(csi2_hw->irq2);
+	csi2_disable(csi2_hw);
+	csi2_disable_clks(csi2_hw);
+}
+
 static int csi2_start(struct csi2_dev *csi2)
 {
 	enum host_type_t host_type;
-	int ret, i;
+	int ret = 0, i;
 	int csi_idx = 0;
 
 	atomic_set(&csi2->frm_sync_seq, 0);
@@ -253,18 +282,11 @@ static int csi2_start(struct csi2_dev *csi2)
 	else
 		host_type = RK_CSI_RXHOST;
 
+	csi2->irq1_timestamp = 0;
+	csi2->irq2_timestamp = 0;
 	for (i = 0; i < csi2->csi_info.csi_num; i++) {
 		csi_idx = csi2->csi_info.csi_idx[i];
-		csi2_hw_do_reset(csi2->csi2_hw[csi_idx]);
-		ret = csi2_enable_clks(csi2->csi2_hw[csi_idx]);
-		if (ret) {
-			v4l2_err(&csi2->sd, "%s: enable clks failed, index %d\n",
-				 __func__, csi_idx);
-			return ret;
-		}
-		enable_irq(csi2->csi2_hw[csi_idx]->irq1);
-		enable_irq(csi2->csi2_hw[csi_idx]->irq2);
-		csi2_enable(csi2->csi2_hw[csi_idx], host_type);
+		ret |= csi2_hw_start(csi2->csi2_hw[csi_idx], host_type);
 	}
 
 	pr_debug("stream sd: %s\n", csi2->src_sd->name);
@@ -281,10 +303,7 @@ static int csi2_start(struct csi2_dev *csi2)
 err_assert_reset:
 	for (i = 0; i < csi2->csi_info.csi_num; i++) {
 		csi_idx = csi2->csi_info.csi_idx[i];
-		disable_irq(csi2->csi2_hw[csi_idx]->irq1);
-		disable_irq(csi2->csi2_hw[csi_idx]->irq2);
-		csi2_disable(csi2->csi2_hw[csi_idx]);
-		csi2_disable_clks(csi2->csi2_hw[csi_idx]);
+		csi2_hw_stop(csi2->csi2_hw[csi_idx]);
 	}
 
 	return ret;
@@ -304,11 +323,7 @@ static void csi2_stop(struct csi2_dev *csi2)
 
 	for (i = 0; i < csi2->csi_info.csi_num; i++) {
 		csi_idx = csi2->csi_info.csi_idx[i];
-		disable_irq(csi2->csi2_hw[csi_idx]->irq1);
-		disable_irq(csi2->csi2_hw[csi_idx]->irq2);
-		csi2_disable(csi2->csi2_hw[csi_idx]);
-		csi2_hw_do_reset(csi2->csi2_hw[csi_idx]);
-		csi2_disable_clks(csi2->csi2_hw[csi_idx]);
+		csi2_hw_stop(csi2->csi2_hw[csi_idx]);
 	}
 }
 
@@ -626,12 +641,51 @@ static void csi2_quick_stream_off(struct csi2_dev *csi2)
 	}
 }
 
+static int csi2_get_error_info(struct csi2_dev *csi2,
+			       struct rkmodule_error_info *err_info)
+{
+	int count = 0;
+
+	memset(err_info, 0, sizeof(*err_info));
+
+	count = snprintf(err_info->detail, sizeof(err_info->detail), "%s:", csi2->dev_name);
+
+#define APPEND_STAT(field) \
+	do {\
+		ssize_t remaining = sizeof(err_info->detail) - count;\
+		if (remaining > 0) { \
+			int written = snprintf(err_info->detail + count, remaining, "%u,", csi2->err_list[field].cnt); \
+			if (written >= 0) { \
+				count += written; \
+			} \
+		} \
+	} while (0)
+
+	APPEND_STAT(RK_CSI2_ERR_SOTSYN);
+	APPEND_STAT(RK_CSI2_ERR_FS_FE_MIS);
+	APPEND_STAT(RK_CSI2_ERR_FRM_SEQ_ERR);
+	APPEND_STAT(RK_CSI2_ERR_CRC_ONCE);
+	APPEND_STAT(RK_CSI2_ERR_CRC);
+	APPEND_STAT(RK_CSI2_ERR_ECC2);
+	APPEND_STAT(RK_CSI2_ERR_CTRL);
+	APPEND_STAT(RK_CSI2_ERR_ULPM);
+	APPEND_STAT(RK_CSI2_ERR_SOT);
+	APPEND_STAT(RK_CSI2_ERR_ECC);
+	APPEND_STAT(RK_CSI2_ERR_ID);
+	APPEND_STAT(RK_CSI2_ERR_CODE);
+
+	err_info->err_code = csi2->err_list[RK_CSI2_ERR_ALL].cnt ? BIT(0) : 0;
+
+	return 0;
+}
+
 static long rkcif_csi2_ioctl(struct v4l2_subdev *sd, unsigned int cmd, void *arg)
 {
 	struct csi2_dev *csi2 = sd_to_dev(sd);
 	struct v4l2_subdev *sensor = get_remote_sensor(sd);
 	long ret = 0;
 	int i = 0;
+	struct rkmodule_error_info *err_info;
 
 	switch (cmd) {
 	case RKCIF_CMD_SET_CSI_IDX:
@@ -652,6 +706,10 @@ static long rkcif_csi2_ioctl(struct v4l2_subdev *sd, unsigned int cmd, void *arg
 		else
 			csi2_quick_stream_off(csi2);
 		break;
+	case RKMODULE_GET_ERROR_INFO:
+		err_info = (struct rkmodule_error_info *)arg;
+		ret = csi2_get_error_info(csi2, err_info);
+		break;
 	default:
 		ret = -ENOIOCTLCMD;
 		break;
@@ -668,6 +726,7 @@ static long rkcif_csi2_compat_ioctl32(struct v4l2_subdev *sd,
 	struct rkcif_csi_info csi_info;
 	int sw_dbg = 0;
 	long ret;
+	struct rkmodule_error_info *err_info;
 
 	switch (cmd) {
 	case RKCIF_CMD_SET_CSI_IDX:
@@ -681,6 +740,22 @@ static long rkcif_csi2_compat_ioctl32(struct v4l2_subdev *sd,
 			return -EFAULT;
 
 		ret = rkcif_csi2_ioctl(sd, cmd, &sw_dbg);
+		break;
+	case RKMODULE_GET_ERROR_INFO:
+		err_info = kzalloc(sizeof(*err_info), GFP_KERNEL);
+		if (!err_info) {
+			ret = -ENOMEM;
+			return ret;
+		}
+
+		ret = rkcif_csi2_ioctl(sd, cmd, err_info);
+		if (!ret) {
+			if (copy_to_user(up, err_info, sizeof(*err_info))) {
+				kfree(err_info);
+				return -EFAULT;
+			}
+		}
+		kfree(err_info);
 		break;
 	default:
 		ret = -ENOIOCTLCMD;
@@ -827,6 +902,7 @@ static irqreturn_t rk_csirx_irq1_handler(int irq, void *ctx)
 	char cur_str[CSI_ERRSTR_LEN] = {0};
 	char vc_info[CSI_VCINFO_LEN] = {0};
 	bool is_add_cnt = false;
+	u64 cur_timestamp = ktime_get_ns();
 
 	if (!csi2_hw) {
 		disable_irq_nosync(irq);
@@ -899,7 +975,7 @@ static irqreturn_t rk_csirx_irq1_handler(int irq, void *ctx)
 		}
 
 		if (val & CSIHOST_ERR1_ERR_ECC2) {
-			err_list = &csi2->err_list[RK_CSI2_ERR_CRC];
+			err_list = &csi2->err_list[RK_CSI2_ERR_ECC2];
 			err_list->cnt++;
 			is_add_cnt = true;
 			snprintf(cur_str, CSI_ERRSTR_LEN, "(ecc2) ");
@@ -907,12 +983,17 @@ static irqreturn_t rk_csirx_irq1_handler(int irq, void *ctx)
 		}
 
 		if (val & CSIHOST_ERR1_ERR_CTRL) {
+			err_list = &csi2->err_list[RK_CSI2_ERR_CTRL];
+			err_list->cnt++;
 			csi2_find_err_vc((val >> 16) & 0xf, vc_info);
 			snprintf(cur_str, CSI_ERRSTR_LEN, "(ctrl,vc:%s) ", vc_info);
 			csi2_err_strncat(err_str, cur_str);
 		}
 
-		pr_err("(0x%x)MIPI_CSI2 ERR1:0x%x %s\n", (u32)csi2_hw->res->start, val, err_str);
+		if (csi2->irq1_timestamp == 0 || cur_timestamp - csi2->irq1_timestamp > 1000000000) {
+			csi2->irq1_timestamp = cur_timestamp;
+			pr_err("(0x%x)MIPI_CSI2 ERR1:0x%x %s\n", (u32)csi2_hw->res->start, val, err_str);
+		}
 
 		if (is_add_cnt) {
 			csi2->err_list[RK_CSI2_ERR_ALL].cnt++;
@@ -933,12 +1014,21 @@ static irqreturn_t rk_csirx_irq2_handler(int irq, void *ctx)
 {
 	struct device *dev = ctx;
 	struct csi2_hw *csi2_hw = dev_get_drvdata(dev);
+	struct csi2_dev *csi2 = NULL;
 	u32 val;
 	char cur_str[CSI_ERRSTR_LEN] = {0};
 	char err_str[CSI_ERRSTR_LEN] = {0};
 	char vc_info[CSI_VCINFO_LEN] = {0};
+	u64 cur_timestamp = ktime_get_ns();
+	struct csi2_err_stats *err_list = NULL;
 
 	if (!csi2_hw) {
+		disable_irq_nosync(irq);
+		return IRQ_HANDLED;
+	}
+
+	csi2 = csi2_hw->csi2;
+	if (!csi2) {
 		disable_irq_nosync(irq);
 		return IRQ_HANDLED;
 	}
@@ -946,31 +1036,44 @@ static irqreturn_t rk_csirx_irq2_handler(int irq, void *ctx)
 	val = read_csihost_reg(csi2_hw->base, CSIHOST_ERR2);
 	if (val) {
 		if (val & CSIHOST_ERR2_PHYERR_ESC) {
+			err_list = &csi2->err_list[RK_CSI2_ERR_ULPM];
+			err_list->cnt++;
 			csi2_find_err_vc(val & 0xf, vc_info);
 			snprintf(cur_str, CSI_ERRSTR_LEN, "(ULPM,lane:%s) ", vc_info);
 			csi2_err_strncat(err_str, cur_str);
 		}
 		if (val & CSIHOST_ERR2_PHYERR_SOTHS) {
+			err_list = &csi2->err_list[RK_CSI2_ERR_SOT];
+			err_list->cnt++;
 			csi2_find_err_vc((val >> 4) & 0xf, vc_info);
 			snprintf(cur_str, CSI_ERRSTR_LEN, "(sot,lane:%s) ", vc_info);
 			csi2_err_strncat(err_str, cur_str);
 		}
 		if (val & CSIHOST_ERR2_ECC_CORRECTED) {
+			err_list = &csi2->err_list[RK_CSI2_ERR_ECC];
+			err_list->cnt++;
 			csi2_find_err_vc((val >> 8) & 0xf, vc_info);
 			snprintf(cur_str, CSI_ERRSTR_LEN, "(ecc,vc:%s) ", vc_info);
 			csi2_err_strncat(err_str, cur_str);
 		}
 		if (val & CSIHOST_ERR2_ERR_ID) {
+			err_list = &csi2->err_list[RK_CSI2_ERR_ID];
+			err_list->cnt++;
 			csi2_find_err_vc((val >> 12) & 0xf, vc_info);
 			snprintf(cur_str, CSI_ERRSTR_LEN, "(err id,vc:%s) ", vc_info);
 			csi2_err_strncat(err_str, cur_str);
 		}
 		if (val & CSIHOST_ERR2_PHYERR_CODEHS) {
+			err_list = &csi2->err_list[RK_CSI2_ERR_CODE];
+			err_list->cnt++;
 			snprintf(cur_str, CSI_ERRSTR_LEN, "(err code) ");
 			csi2_err_strncat(err_str, cur_str);
 		}
 
-		pr_err("(0x%x)MIPI_CSI2 ERR2:0x%x %s\n", (u32)csi2_hw->res->start, val, err_str);
+		if (csi2->irq2_timestamp == 0 || cur_timestamp - csi2->irq2_timestamp > 1000000000) {
+			csi2->irq2_timestamp = cur_timestamp;
+			pr_err("(0x%x)MIPI_CSI2 ERR2:0x%x %s\n", (u32)csi2_hw->res->start, val, err_str);
+		}
 	}
 
 	return IRQ_HANDLED;
@@ -1486,6 +1589,7 @@ static int csi2_hw_probe(struct platform_device *pdev)
 		dev_err(&pdev->dev, "No found irq csi-intr2\n");
 	}
 	platform_set_drvdata(pdev, csi2_hw);
+	atomic_set(&csi2_hw->stream_count, 0);
 	dev_info(&pdev->dev, "probe success, v4l2_dev:%s!\n", csi2_hw->dev_name);
 
 	return 0;

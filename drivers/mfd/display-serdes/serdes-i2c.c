@@ -17,6 +17,9 @@ int serdes_i2c_set_sequence(struct serdes *serdes)
 	int i, num = 0, ret = 0;
 	unsigned int def = 0;
 
+	if (!serdes->serdes_init_seq)
+		return 0;
+
 	for (i = 0; i < serdes->serdes_init_seq->reg_seq_cnt; i++) {
 		if (serdes->serdes_init_seq->reg_sequence[i].reg == 0xffff) {
 			SERDES_DBG_MFD("%s: delay 0x%04x us\n", __func__,
@@ -195,10 +198,13 @@ static void serdes_reg_check_work(struct kthread_work *work)
 	}
 
 	serdes_i2c_check_register(serdes, &flag);
+
 	if (flag) {
+
 		if (serdes->chip_data->chip_init)
 			serdes->chip_data->chip_init(serdes);
 		serdes_i2c_set_sequence_backup(serdes);
+
 		msleep(500);
 		SERDES_DBG_MFD("%s %s\n", __func__, serdes->chip_data->name);
 	}
@@ -208,6 +214,9 @@ static void serdes_reg_check_work(struct kthread_work *work)
 
 static int serdes_reg_check_work_setup(struct serdes *serdes)
 {
+	if (!serdes->serdes_backup_seq || !serdes->serdes_backup_seq->reg_seq_cnt)
+		return 0;
+
 	kthread_init_delayed_work(&serdes->reg_check_work,
 				  serdes_reg_check_work);
 
@@ -219,6 +228,8 @@ static int serdes_reg_check_work_setup(struct serdes *serdes)
 	atomic_set(&serdes->flag_early_suspend, 0);
 	kthread_queue_delayed_work(serdes->kworker, &serdes->reg_check_work,
 				   msecs_to_jiffies(20000));
+
+	SERDES_DBG_MFD("serdes %s use_reg_check_work\n", serdes->chip_data->name);
 
 	return 0;
 }
@@ -285,7 +296,7 @@ static int serdes_get_init_seq(struct serdes *serdes)
 	data = of_get_property(np, "serdes-init-sequence", &len);
 	if (!data) {
 		dev_err(dev, "failed to get serdes-init-sequence\n");
-		return -EINVAL;
+		return 0;
 	}
 
 	serdes->serdes_init_seq = devm_kzalloc(dev, sizeof(*serdes->serdes_init_seq),
@@ -372,6 +383,8 @@ static int serdes_i2c_probe(struct i2c_client *client,
 		}
 	}
 
+	serdes->dual_link = of_property_read_bool(dev->of_node, "dual-link");
+
 	serdes->extcon = devm_extcon_dev_allocate(dev, serdes_cable);
 	if (IS_ERR(serdes->extcon))
 		return dev_err_probe(dev, PTR_ERR(serdes->extcon),
@@ -440,11 +453,10 @@ static int serdes_i2c_probe(struct i2c_client *client,
 	}
 
 	serdes->use_reg_check_work = of_property_read_bool(dev->of_node, "use-reg-check-work");
-	if (serdes->use_reg_check_work) {
+	if (serdes->use_reg_check_work)
 		serdes_reg_check_work_setup(serdes);
 
-		SERDES_DBG_MFD("%s: use_reg_check_work=%d\n", __func__, serdes->use_reg_check_work);
-	}
+	serdes_create_debugfs(serdes);
 
 	dev_info(dev, "serdes %s serdes_i2c_probe successful version %s\n",
 		 serdes->chip_data->name, MFD_SERDES_DISPLAY_VERSION);
@@ -465,13 +477,15 @@ static void serdes_i2c_remove(struct i2c_client *client)
 	struct device *dev = &client->dev;
 	struct serdes *serdes = dev_get_drvdata(dev);
 
-	if (serdes->use_reg_check_work)
+	if (!IS_ERR_OR_NULL(serdes->kworker))
 		serdes_reg_check_work_free(serdes);
 
 	if (serdes->use_delay_work) {
 		cancel_delayed_work_sync(&serdes->mfd_delay_work);
 		destroy_workqueue(serdes->mfd_wq);
 	}
+
+	serdes_destroy_debugfs(serdes);
 }
 
 static int serdes_i2c_prepare(struct device *dev)
@@ -536,6 +550,9 @@ static const struct of_device_id serdes_of_match[] = {
 #if IS_ENABLED(CONFIG_SERDES_DISPLAY_CHIP_MAXIM_MAX96745)
 	{ .compatible = "maxim,max96745", .data = &serdes_max96745_data },
 #endif
+#if IS_ENABLED(CONFIG_SERDES_DISPLAY_CHIP_MAXIM_MAX96749)
+	{ .compatible = "maxim,max96749", .data = &serdes_max96749_data },
+#endif
 #if IS_ENABLED(CONFIG_SERDES_DISPLAY_CHIP_MAXIM_MAX96752)
 	{ .compatible = "maxim,max96752", .data = &serdes_max96752_data },
 #endif
@@ -584,12 +601,24 @@ static int __init serdes_i2c_init(void)
 	int ret;
 
 	ret = i2c_add_driver(&serdes_i2c_driver);
-	if (ret != 0)
+	if (ret != 0) {
 		pr_err("Failed to register serdes I2C driver: %d\n", ret);
+		return ret;
+	}
 
-	return ret;
+	serdes_debugfs_init();
+
+	return 0;
 }
+
+static void __exit serdes_i2c_exit(void)
+{
+	i2c_del_driver(&serdes_i2c_driver);
+	serdes_debugfs_exit();
+}
+
 subsys_initcall(serdes_i2c_init);
+module_exit(serdes_i2c_exit);
 
 MODULE_AUTHOR("Luo Wei <lw@rock-chips.com>");
 MODULE_DESCRIPTION("display i2c interface for different serdes");

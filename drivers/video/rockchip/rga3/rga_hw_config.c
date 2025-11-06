@@ -14,6 +14,8 @@
 const uint32_t rga3_input_raster_format[] = {
 	RGA_FORMAT_RGBA_8888,
 	RGA_FORMAT_BGRA_8888,
+	RGA_FORMAT_RGBX_8888,
+	RGA_FORMAT_BGRX_8888,
 	RGA_FORMAT_RGB_888,
 	RGA_FORMAT_BGR_888,
 	RGA_FORMAT_RGB_565,
@@ -32,11 +34,15 @@ const uint32_t rga3_input_raster_format[] = {
 	RGA_FORMAT_YCrCb_422_SP_10B,
 	RGA_FORMAT_ARGB_8888,
 	RGA_FORMAT_ABGR_8888,
+	RGA_FORMAT_XRGB_8888,
+	RGA_FORMAT_XBGR_8888,
 };
 
 const uint32_t rga3_output_raster_format[] = {
 	RGA_FORMAT_RGBA_8888,
 	RGA_FORMAT_BGRA_8888,
+	RGA_FORMAT_RGBX_8888,
+	RGA_FORMAT_BGRX_8888,
 	RGA_FORMAT_RGB_888,
 	RGA_FORMAT_BGR_888,
 	RGA_FORMAT_RGB_565,
@@ -58,6 +64,31 @@ const uint32_t rga3_output_raster_format[] = {
 const uint32_t rga3_fbcd_format[] = {
 	RGA_FORMAT_RGBA_8888,
 	RGA_FORMAT_BGRA_8888,
+	RGA_FORMAT_RGBX_8888,
+	RGA_FORMAT_BGRX_8888,
+	RGA_FORMAT_ARGB_8888,
+	RGA_FORMAT_ABGR_8888,
+	RGA_FORMAT_XRGB_8888,
+	RGA_FORMAT_XBGR_8888,
+	RGA_FORMAT_RGB_888,
+	RGA_FORMAT_BGR_888,
+	RGA_FORMAT_RGB_565,
+	RGA_FORMAT_BGR_565,
+	RGA_FORMAT_YCbCr_422_SP,
+	RGA_FORMAT_YCbCr_420_SP,
+	RGA_FORMAT_YCrCb_422_SP,
+	RGA_FORMAT_YCrCb_420_SP,
+	RGA_FORMAT_YCbCr_420_SP_10B,
+	RGA_FORMAT_YCrCb_420_SP_10B,
+	RGA_FORMAT_YCbCr_422_SP_10B,
+	RGA_FORMAT_YCrCb_422_SP_10B,
+};
+
+const uint32_t rga3_fbce_format[] = {
+	RGA_FORMAT_RGBA_8888,
+	RGA_FORMAT_BGRA_8888,
+	RGA_FORMAT_RGBX_8888,
+	RGA_FORMAT_BGRX_8888,
 	RGA_FORMAT_RGB_888,
 	RGA_FORMAT_BGR_888,
 	RGA_FORMAT_RGB_565,
@@ -352,8 +383,8 @@ const struct rga_win_data rga3_win_data[] = {
 		.name = "rga3-wr",
 		.formats[RGA_RASTER_INDEX] = rga3_output_raster_format,
 		.formats_count[RGA_RASTER_INDEX] = ARRAY_SIZE(rga3_output_raster_format),
-		.formats[RGA_AFBC16x16_INDEX] = rga3_fbcd_format,
-		.formats_count[RGA_AFBC16x16_INDEX] = ARRAY_SIZE(rga3_fbcd_format),
+		.formats[RGA_AFBC16x16_INDEX] = rga3_fbce_format,
+		.formats_count[RGA_AFBC16x16_INDEX] = ARRAY_SIZE(rga3_fbce_format),
 		.formats[RGA_TILE8x8_INDEX] = rga3_tile_format,
 		.formats_count[RGA_TILE8x8_INDEX] = ARRAY_SIZE(rga3_tile_format),
 		.supported_rotations = 0,
@@ -558,6 +589,8 @@ const struct rga_hw_data rga3_data = {
 	.csc_y2r_mode = RGA_MODE_CSC_BT601L | RGA_MODE_CSC_BT601F |
 			RGA_MODE_CSC_BT709 | RGA_MODE_CSC_BT2020,
 	.mmu = RGA_IOMMU,
+
+	.cmd_reg_size = 48, //0x100:0x1bc
 };
 
 const struct rga_hw_data rga2e_data = {
@@ -577,10 +610,13 @@ const struct rga_hw_data rga2e_data = {
 	.feature = RGA_COLOR_FILL | RGA_COLOR_PALETTE |
 		   RGA_COLOR_KEY | RGA_ROP_CALCULATE |
 		   RGA_NN_QUANTIZE | RGA_DITHER | RGA_FULL_CSC,
-	.csc_r2y_mode = RGA_MODE_CSC_BT601L | RGA_MODE_CSC_BT601F,
+	.csc_r2y_mode = RGA_MODE_CSC_BT601L | RGA_MODE_CSC_BT601F |
+			RGA_MODE_CSC_BT709,
 	.csc_y2r_mode = RGA_MODE_CSC_BT601L | RGA_MODE_CSC_BT601F |
 			RGA_MODE_CSC_BT709,
 	.mmu = RGA_MMU,
+
+	.cmd_reg_size = 32, //0x100:0x17c
 };
 
 const struct rga_hw_data rga2e_1106_data = {
@@ -607,12 +643,14 @@ const struct rga_hw_data rga2e_1106_data = {
 	.csc_y2r_mode = RGA_MODE_CSC_BT601L | RGA_MODE_CSC_BT601F |
 			RGA_MODE_CSC_BT709,
 	.mmu = RGA_NONE_MMU,
+
+	.cmd_reg_size = 32, //0x100:0x17c
 };
 
 const struct rga_hw_data rga2e_3506_data = {
 	.version = 0,
-	.input_range = {{2, 2}, {1280, 1280}},
-	.output_range = {{2, 2}, {1280, 1280}},
+	.input_range = {{2, 2}, {1280, 8192}},
+	.output_range = {{2, 2}, {1280, 4096}},
 
 	.win = rga2e_3506_win_data,
 	.win_size = ARRAY_SIZE(rga2e_3506_win_data),
@@ -631,6 +669,8 @@ const struct rga_hw_data rga2e_3506_data = {
 	.csc_y2r_mode = RGA_MODE_CSC_BT601L | RGA_MODE_CSC_BT601F |
 			RGA_MODE_CSC_BT709,
 	.mmu = RGA_NONE_MMU,
+
+	.cmd_reg_size = 32, //0x100:0x17c
 };
 
 const struct rga_hw_data rga2e_iommu_data = {
@@ -657,6 +697,8 @@ const struct rga_hw_data rga2e_iommu_data = {
 	.csc_y2r_mode = RGA_MODE_CSC_BT601L | RGA_MODE_CSC_BT601F |
 			RGA_MODE_CSC_BT709,
 	.mmu = RGA_IOMMU,
+
+	.cmd_reg_size = 32, //0x100:0x17c
 };
 
 const struct rga_hw_data rga2p_iommu_data = {
@@ -683,12 +725,14 @@ const struct rga_hw_data rga2p_iommu_data = {
 	.csc_y2r_mode = RGA_MODE_CSC_BT601L | RGA_MODE_CSC_BT601F |
 			RGA_MODE_CSC_BT709,
 	.mmu = RGA_IOMMU,
+
+	.cmd_reg_size = 32, //0x100:0x17c
 };
 
 const struct rga_hw_data rga2p_lite_1103b_data = {
 	.version = 0,
-	.input_range = {{2, 2}, {2880, 1620}},
-	.output_range = {{2, 2}, {2880, 1620}},
+	.input_range = {{2, 2}, {2880, 8192}},
+	.output_range = {{2, 2}, {2880, 8192}},
 
 	.win = rga2p_lite_win_data,
 	.win_size = ARRAY_SIZE(rga2p_lite_win_data),
@@ -707,6 +751,8 @@ const struct rga_hw_data rga2p_lite_1103b_data = {
 	.csc_y2r_mode = RGA_MODE_CSC_BT601L | RGA_MODE_CSC_BT601F |
 			RGA_MODE_CSC_BT709,
 	.mmu = RGA_NONE_MMU,
+
+	.cmd_reg_size = 32, //0x100:0x17c
 };
 
 const struct rga_hw_data rga2p_iommu_non_fbc_data = {
@@ -733,4 +779,6 @@ const struct rga_hw_data rga2p_iommu_non_fbc_data = {
 	.csc_y2r_mode = RGA_MODE_CSC_BT601L | RGA_MODE_CSC_BT601F |
 			RGA_MODE_CSC_BT709,
 	.mmu = RGA_IOMMU,
+
+	.cmd_reg_size = 32, //0x100:0x17c
 };

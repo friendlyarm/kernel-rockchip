@@ -526,6 +526,27 @@ static void rkcif_show_reg_dbg(struct rkcif_device *dev, struct seq_file *f)
 	}
 }
 
+static void rkcif_show_mipi_csi2_error_info(struct rkcif_device *dev, struct seq_file *f)
+{
+	struct csi2_dev *csi2 = container_of(dev->active_sensor->sd, struct csi2_dev, sd);
+
+	seq_puts(f, "\nMipi error info:\n");
+	seq_printf(f, "\terr sot sync:%u\n",
+		   csi2->err_list[RK_CSI2_ERR_SOTSYN].cnt);
+	seq_printf(f, "\terr fs/fe not match:%u\n",
+		   csi2->err_list[RK_CSI2_ERR_FS_FE_MIS].cnt);
+	seq_printf(f, "\terr frm seq:%u\n",
+		   csi2->err_list[RK_CSI2_ERR_FRM_SEQ_ERR].cnt);
+	seq_printf(f, "\terr crc once:%u\n",
+		   csi2->err_list[RK_CSI2_ERR_CRC_ONCE].cnt);
+	seq_printf(f, "\terr crc:%u\n",
+		   csi2->err_list[RK_CSI2_ERR_CRC].cnt);
+	seq_printf(f, "\terr ecc2:%u\n",
+		   csi2->err_list[RK_CSI2_ERR_ECC2].cnt);
+	seq_printf(f, "\terr ctrl:%u\n",
+		   csi2->err_list[RK_CSI2_ERR_CTRL].cnt);
+}
+
 static void rkcif_show_format(struct rkcif_device *dev, struct seq_file *f)
 {
 	struct rkcif_stream *stream = &dev->stream[0];
@@ -538,6 +559,7 @@ static void rkcif_show_format(struct rkcif_device *dev, struct seq_file *f)
 	u64 fps, timestamp0, timestamp1;
 	unsigned long flags;
 	u32 time_val = 0;
+	u32 remainder = 0;
 
 	if (atomic_read(&pipe->stream_cnt) < 1)
 		return;
@@ -582,11 +604,11 @@ static void rkcif_show_format(struct rkcif_device *dev, struct seq_file *f)
 		timestamp1 = stream->fps_stats.frm1_timestamp;
 		spin_unlock_irqrestore(&stream->fps_lock, flags);
 		if (dev->sditf[0] && dev->sditf[0]->mode.rdbk_mode < RKISP_VICAP_RDBK_AIQ)
-			fps = dev->stream[0].readout.total_time;
+			fps = dev->stream[0].readout.rate_time;
 		else
 			fps = timestamp0 > timestamp1 ?
 			      timestamp0 - timestamp1 : timestamp1 - timestamp0;
-		fps = div_u64(fps, 1000000);
+		fps = div_u64(fps, 1000);
 
 		seq_puts(f, "Output Info:\n");
 		seq_printf(f, "\tformat:%s/%ux%u(%u,%u)\n",
@@ -596,29 +618,29 @@ static void rkcif_show_format(struct rkcif_device *dev, struct seq_file *f)
 		seq_printf(f, "\tcompact:%s\n", stream->is_compact ? "enable" : "disabled");
 		seq_printf(f, "\tframe amount:%d\n", stream->frame_idx - 1);
 		if (dev->inf_id == RKCIF_MIPI_LVDS) {
-			time_val = div_u64(stream->readout.early_time, 1000000);
-			seq_printf(f, "\tearly:%u ms\n", time_val);
+			time_val = div_u64(stream->readout.early_time, 1000);
+			time_val = div_u64_rem(time_val, 1000, &remainder);
+			seq_printf(f, "\tearly:%u.%u ms\n", time_val, remainder);
 			if (dev->hdr.hdr_mode == NO_HDR ||
 			    dev->hdr.hdr_mode == HDR_COMPR) {
-				time_val = div_u64(stream->readout.readout_time, 1000000);
-				if (dev->sditf[0] && dev->sditf[0]->mode.rdbk_mode < RKISP_VICAP_RDBK_AIQ)
-					seq_puts(f, "\tsingle readout:N/A\n");
-				else
-					seq_printf(f, "\tsingle readout:%u ms\n", time_val);
+				time_val = div_u64(stream->readout.readout_time, 1000);
+				time_val = div_u64_rem(time_val, 1000, &remainder);
+				seq_printf(f, "\tsingle readout:%u.%u ms\n", time_val, remainder);
 			} else {
-				time_val = div_u64(stream->readout.readout_time, 1000000);
-				if (dev->sditf[0] && dev->sditf[0]->mode.rdbk_mode < RKISP_VICAP_RDBK_AIQ)
-					seq_puts(f, "\tsingle readout:N/A\n");
-				else
-					seq_printf(f, "\tsingle readout:%u ms\n", time_val);
-				time_val = div_u64(stream->readout.total_time, 1000000);
-				seq_printf(f, "\ttotal readout:%u ms\n", time_val);
+				time_val = div_u64(stream->readout.readout_time, 1000);
+				time_val = div_u64_rem(time_val, 1000, &remainder);
+				seq_printf(f, "\tsingle readout:%u.%u ms\n", time_val, remainder);
+				time_val = div_u64(stream->readout.total_time, 1000);
+				time_val = div_u64_rem(time_val, 1000, &remainder);
+				seq_printf(f, "\ttotal readout:%u.%u ms\n", time_val, remainder);
 
 			}
 		}
-		seq_printf(f, "\trate:%llu ms\n", fps);
-		fps = div_u64(1000, fps);
-		seq_printf(f, "\tfps:%llu\n", fps);
+		time_val = div_u64_rem(fps, 1000, &remainder);
+		seq_printf(f, "\trate:%u.%u ms\n", time_val, remainder);
+		fps = div_u64(1000000000, fps);
+		time_val = div_u64_rem(fps, 1000, &remainder);
+		seq_printf(f, "\tfps:%u.%u \n", time_val, remainder);
 		seq_puts(f, "\tirq statistics:\n");
 		seq_printf(f, "\t\t\ttotal:%llu\n",
 			   dev->irq_stats.frm_end_cnt[0] +
@@ -676,6 +698,9 @@ static void rkcif_show_format(struct rkcif_device *dev, struct seq_file *f)
 			rkcif_show_toisp_info(dev, f);
 		if (dev->reg_dbg)
 			rkcif_show_reg_dbg(dev, f);
+		if (sensor->mbus.type == V4L2_MBUS_CSI2_DPHY ||
+		    sensor->mbus.type == V4L2_MBUS_CSI2_CPHY)
+			rkcif_show_mipi_csi2_error_info(dev, f);
 	}
 }
 

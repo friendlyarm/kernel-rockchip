@@ -1303,6 +1303,10 @@ static const struct cif_reg rv1126b_cif_regs[] = {
 	[CIF_REG_MIPI_SET_SIZE_ID1] = CIF_REG(CSI_MIPI0_SET_FRAME_SIZE_ID1_RV1126B),
 	[CIF_REG_MIPI_SET_SIZE_ID2] = CIF_REG(CSI_MIPI0_SET_FRAME_SIZE_ID2_RV1126B),
 	[CIF_REG_MIPI_SET_SIZE_ID3] = CIF_REG(CSI_MIPI0_SET_FRAME_SIZE_ID3_RV1126B),
+	[CIF_REG_MIPI_FRAME_SIZE_ID0] = CIF_REG(CSI_MIPI0_FRAME_SIZE_ID0),
+	[CIF_REG_MIPI_FRAME_SIZE_ID1] = CIF_REG(CSI_MIPI0_FRAME_SIZE_ID1),
+	[CIF_REG_MIPI_FRAME_SIZE_ID2] = CIF_REG(CSI_MIPI0_FRAME_SIZE_ID2),
+	[CIF_REG_MIPI_FRAME_SIZE_ID3] = CIF_REG(CSI_MIPI0_FRAME_SIZE_ID3),
 
 	[CIF_REG_GLB_CTRL] = CIF_REG(GLB_CTRL),
 	[CIF_REG_GLB_INTEN] = CIF_REG(GLB_INTEN),
@@ -1331,6 +1335,7 @@ static const struct rkcif_hw_match_data px30_cif_match_data = {
 	.rsts = px30_cif_rsts,
 	.rsts_num = ARRAY_SIZE(px30_cif_rsts),
 	.cif_regs = px30_cif_regs,
+	.max_hw = 1,
 };
 
 static const struct rkcif_hw_match_data rk1808_cif_match_data = {
@@ -1340,6 +1345,7 @@ static const struct rkcif_hw_match_data rk1808_cif_match_data = {
 	.rsts = rk1808_cif_rsts,
 	.rsts_num = ARRAY_SIZE(rk1808_cif_rsts),
 	.cif_regs = rk1808_cif_regs,
+	.max_hw = 1,
 };
 
 static const struct rkcif_hw_match_data rk3128_cif_match_data = {
@@ -1349,6 +1355,7 @@ static const struct rkcif_hw_match_data rk3128_cif_match_data = {
 	.rsts = rk3128_cif_rsts,
 	.rsts_num = ARRAY_SIZE(rk3128_cif_rsts),
 	.cif_regs = rk3128_cif_regs,
+	.max_hw = 1,
 };
 
 static const struct rkcif_hw_match_data rk3288_cif_match_data = {
@@ -1358,6 +1365,7 @@ static const struct rkcif_hw_match_data rk3288_cif_match_data = {
 	.rsts = rk3288_cif_rsts,
 	.rsts_num = ARRAY_SIZE(rk3288_cif_rsts),
 	.cif_regs = rk3288_cif_regs,
+	.max_hw = 1,
 };
 
 static const struct rkcif_hw_match_data rk3328_cif_match_data = {
@@ -1367,6 +1375,7 @@ static const struct rkcif_hw_match_data rk3328_cif_match_data = {
 	.rsts = rk3328_cif_rsts,
 	.rsts_num = ARRAY_SIZE(rk3328_cif_rsts),
 	.cif_regs = rk3328_cif_regs,
+	.max_hw = 1,
 };
 
 static const struct rkcif_hw_match_data rk3368_cif_match_data = {
@@ -1376,6 +1385,7 @@ static const struct rkcif_hw_match_data rk3368_cif_match_data = {
 	.rsts = rk3368_cif_rsts,
 	.rsts_num = ARRAY_SIZE(rk3368_cif_rsts),
 	.cif_regs = rk3368_cif_regs,
+	.max_hw = 1,
 };
 
 static const struct rkcif_hw_match_data rv1126_cif_match_data = {
@@ -1385,6 +1395,7 @@ static const struct rkcif_hw_match_data rv1126_cif_match_data = {
 	.rsts = rv1126_cif_rsts,
 	.rsts_num = ARRAY_SIZE(rv1126_cif_rsts),
 	.cif_regs = rv1126_cif_regs,
+	.max_hw = 2,
 };
 
 static const struct rkcif_hw_match_data rv1126_cif_lite_match_data = {
@@ -1394,6 +1405,7 @@ static const struct rkcif_hw_match_data rv1126_cif_lite_match_data = {
 	.rsts = rv1126_cif_lite_rsts,
 	.rsts_num = ARRAY_SIZE(rv1126_cif_lite_rsts),
 	.cif_regs = rv1126_cif_lite_regs,
+	.max_hw = 1,
 };
 
 static const struct rkcif_hw_match_data rk3568_cif_match_data = {
@@ -1403,6 +1415,7 @@ static const struct rkcif_hw_match_data rk3568_cif_match_data = {
 	.rsts = rk3568_cif_rsts,
 	.rsts_num = ARRAY_SIZE(rk3568_cif_rsts),
 	.cif_regs = rk3568_cif_regs,
+	.max_hw = 2,
 };
 
 static const struct rkcif_hw_match_data rk3588_cif_match_data = {
@@ -1412,6 +1425,7 @@ static const struct rkcif_hw_match_data rk3588_cif_match_data = {
 	.rsts = rk3588_cif_rsts,
 	.rsts_num = ARRAY_SIZE(rk3588_cif_rsts),
 	.cif_regs = rk3588_cif_regs,
+	.max_hw = 7,
 };
 
 static const struct rkcif_hw_match_data rv1106_cif_match_data = {
@@ -1421,6 +1435,7 @@ static const struct rkcif_hw_match_data rv1106_cif_match_data = {
 	.rsts = rv1106_cif_rsts,
 	.rsts_num = ARRAY_SIZE(rv1106_cif_rsts),
 	.cif_regs = rv1106_cif_regs,
+	.max_hw = 3,
 };
 
 static const struct rkcif_hw_match_data rk3562_cif_match_data = {
@@ -1430,6 +1445,7 @@ static const struct rkcif_hw_match_data rk3562_cif_match_data = {
 	.rsts = rk3562_cif_rsts,
 	.rsts_num = ARRAY_SIZE(rk3562_cif_rsts),
 	.cif_regs = rk3562_cif_regs,
+	.max_hw = 4,
 };
 
 static const struct rkcif_hw_match_data rk3576_cif_match_data = {
@@ -1439,6 +1455,7 @@ static const struct rkcif_hw_match_data rk3576_cif_match_data = {
 	.rsts = rk3576_cif_rsts,
 	.rsts_num = ARRAY_SIZE(rk3576_cif_rsts),
 	.cif_regs = rk3576_cif_regs,
+	.max_hw = 6,
 };
 
 static const struct rkcif_hw_match_data rv1103b_cif_match_data = {
@@ -1448,6 +1465,7 @@ static const struct rkcif_hw_match_data rv1103b_cif_match_data = {
 	.rsts = rv1103b_cif_rsts,
 	.rsts_num = ARRAY_SIZE(rv1103b_cif_rsts),
 	.cif_regs = rv1103b_cif_regs,
+	.max_hw = 2,
 };
 
 static const struct rkcif_hw_match_data rv1126b_cif_match_data = {
@@ -1457,6 +1475,7 @@ static const struct rkcif_hw_match_data rv1126b_cif_match_data = {
 	.rsts = rv1126b_cif_rsts,
 	.rsts_num = ARRAY_SIZE(rv1126b_cif_rsts),
 	.cif_regs = rv1126b_cif_regs,
+	.max_hw = 5,
 };
 
 static const struct of_device_id rkcif_plat_of_match[] = {
@@ -1567,7 +1586,7 @@ static irqreturn_t rkcif_irq_handler(int irq, void *ctx)
 	}
 
 	for (i = 0; i < cif_hw->dev_num; i++) {
-		if (cif_hw->cif_dev[i]->isr_hdl) {
+		if (cif_hw->cif_dev[i]->isr_hdl && i < cif_hw->match_data->max_hw) {
 			cif_hw->cif_dev[i]->isr_hdl(irq, cif_hw->cif_dev[i]);
 			if (cif_hw->cif_dev[i]->err_state &&
 			    (!work_busy(&cif_hw->cif_dev[i]->err_state_work.work))) {
@@ -1575,10 +1594,11 @@ static irqreturn_t rkcif_irq_handler(int irq, void *ctx)
 				cif_hw->cif_dev[i]->err_state = 0;
 				schedule_work(&cif_hw->cif_dev[i]->err_state_work.work);
 			}
-			if (cif_hw->chip_id >= CHIP_RK3588_CIF && intstat_glb) {
-				rkcif_irq_handle_toisp(cif_hw->cif_dev[i], intstat_glb);
+		}
+		if (cif_hw->chip_id >= CHIP_RK3588_CIF && intstat_glb) {
+			rkcif_irq_handle_toisp(cif_hw->cif_dev[i], intstat_glb);
+			if (cif_hw->chip_id != CHIP_RV1103B_CIF)
 				rkcif_irq_handle_scale(cif_hw->cif_dev[i], intstat_glb);
-			}
 		}
 	}
 	irq_stop = ktime_get_ns();
@@ -1747,8 +1767,15 @@ static int rkcif_plat_hw_probe(struct platform_device *pdev)
 	if (irq < 0)
 		return irq;
 
-	if (data->chip_id == CHIP_RV1106_CIF ||
-	    data->chip_id == CHIP_RV1103B_CIF) {
+	if (data->chip_id == CHIP_PX30_CIF ||
+	    data->chip_id == CHIP_RK1808_CIF ||
+	    data->chip_id == CHIP_RV1126_CIF ||
+	    data->chip_id == CHIP_RV1126_CIF_LITE ||
+	    data->chip_id == CHIP_RK3568_CIF)
+		cif_hw->is_irq_share = true;
+	else
+		cif_hw->is_irq_share = false;
+	if (!cif_hw->is_irq_share) {
 		irq_set_status_flags(irq, IRQ_NOAUTOEN);
 		ret = devm_request_irq(dev, irq, rkcif_irq_handler,
 				       0,
@@ -1838,6 +1865,10 @@ static int rkcif_plat_hw_probe(struct platform_device *pdev)
 	spin_lock_init(&cif_hw->group_lock);
 	spin_lock_init(&cif_hw->reset_lock);
 	atomic_set(&cif_hw->power_cnt, 0);
+	for (i = 0; i < RKCIF_MAX_SWITCH_GROUP; i++) {
+		atomic_set(&cif_hw->switch_stream_cnt[i], 0);
+		mutex_init(&cif_hw->switch_mutex_lock[i]);
+	}
 	cif_hw->is_in_reset = false;
 
 	cif_hw->iommu_en = is_iommu_enable(dev);
@@ -1946,8 +1977,7 @@ static int __maybe_unused rkcif_runtime_suspend(struct device *dev)
 		return 0;
 	rkcif_disable_sys_clk(cif_hw);
 
-	if (cif_hw->chip_id == CHIP_RV1106_CIF ||
-	    cif_hw->chip_id == CHIP_RV1103B_CIF)
+	if (!cif_hw->is_irq_share)
 		disable_irq(cif_hw->irq);
 
 	return pinctrl_pm_select_sleep_state(dev);
@@ -1966,8 +1996,7 @@ static int __maybe_unused rkcif_runtime_resume(struct device *dev)
 	rkcif_enable_sys_clk(cif_hw);
 	rkcif_hw_soft_reset(cif_hw, true);
 
-	if (cif_hw->chip_id == CHIP_RV1106_CIF ||
-	    cif_hw->chip_id == CHIP_RV1103B_CIF)
+	if (!cif_hw->is_irq_share)
 		enable_irq(cif_hw->irq);
 
 	return 0;
@@ -2057,8 +2086,8 @@ static void __exit rk_cif_plat_drv_exit(void)
 	rkcif_csi2_hw_plat_drv_exit();
 }
 
-#if defined(CONFIG_VIDEO_ROCKCHIP_THUNDER_BOOT_ISP) && !defined(CONFIG_INITCALL_ASYNC)
-subsys_initcall(rk_cif_plat_drv_init);
+#if defined(CONFIG_VIDEO_ROCKCHIP_THUNDER_BOOT_ISP)
+subsys_initcall_sync(rk_cif_plat_drv_init);
 #else
 #if !defined(CONFIG_VIDEO_REVERSE_IMAGE)
 module_init(rk_cif_plat_drv_init);

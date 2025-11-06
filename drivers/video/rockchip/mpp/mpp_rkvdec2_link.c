@@ -80,6 +80,7 @@ struct rkvdec_link_info rkvdec_link_v2_hw_info = {
 	.irq_base = 0x00,
 	.next_addr_base = 0x1c,
 	.err_mask = 0xf0,
+	.en_sw_iommu_zap = 1,
 };
 
 /* vdpu34x link hw info for rk356x */
@@ -142,6 +143,7 @@ struct rkvdec_link_info rkvdec_link_rk356x_hw_info = {
 	.irq_base = 0x00,
 	.next_addr_base = 0x1c,
 	.err_mask = 0xf0,
+	.en_sw_iommu_zap = 1,
 };
 
 /* vdpu382 link hw info */
@@ -204,6 +206,7 @@ struct rkvdec_link_info rkvdec_link_vdpu382_hw_info = {
 	.irq_base = 0x00,
 	.next_addr_base = 0x1c,
 	.err_mask = 0xf0,
+	.en_sw_iommu_zap = 1,
 };
 
 /* vdpu383 link hw info */
@@ -264,6 +267,7 @@ struct rkvdec_link_info rkvdec_link_vdpu383_hw_info = {
 	.en_base = 0x40,
 	.ip_en_base = 0x58,
 	.ip_en_val = 0x01000000,
+	.en_sw_iommu_zap = 1,
 };
 
 /* vdpu384a link hw info */
@@ -509,7 +513,9 @@ static int rkvdec2_link_enqueue(struct rkvdec_link_dev *link_dec,
 	/* start config before all registers are set */
 	wmb();
 
-	mpp_iommu_flush_tlb(link_dec->mpp->iommu_info);
+	/* After rv1126b, hw can execute zap. */
+	if (link_info->en_sw_iommu_zap)
+		mpp_iommu_flush_tlb(link_dec->mpp->iommu_info);
 	mpp_task_run_begin(mpp_task, timing_en, MPP_WORK_TIMEOUT_DELAY);
 
 	link_dec->task_running++;
@@ -531,7 +537,7 @@ static int rkvdec2_link_finish(struct mpp_dev *mpp, struct mpp_task *mpp_task)
 	struct rkvdec2_dev *dec = to_rkvdec2_dev(mpp);
 	struct rkvdec2_task *task = to_rkvdec2_task(mpp_task);
 	struct rkvdec_link_dev *link_dec = dec->link_dec;
-	struct mpp_dma_buffer *table = link_dec->table;
+	struct mpp_dma_buffer *table = task->table;
 	struct rkvdec_link_info *info = link_dec->info;
 	struct rkvdec_link_part *part = info->part_r;
 	u32 *tb_reg = (u32 *)table->vaddr;

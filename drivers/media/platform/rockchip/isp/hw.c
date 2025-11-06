@@ -445,6 +445,8 @@ void rkisp_hw_reg_restore(struct rkisp_hw_dev *dev)
 			*reg &= ~ISP39_W3A_FORCE_UPD;
 			reg = reg_buf + ISP35_AIAWB_CTRL0;
 			*reg &= ~ISP35_AIAWB_SELF_UPD;
+			reg = reg_buf + ISP33_BAY3D_CTRL0;
+			*reg &= ~ISP35_BAY3D_1ST_IIR_RD;
 		}
 		reg = reg_buf + ISP_CTRL;
 		*reg &= ~(CIF_ISP_CTRL_ISP_ENABLE |
@@ -455,9 +457,14 @@ void rkisp_hw_reg_restore(struct rkisp_hw_dev *dev)
 		reg = reg_buf + CSI2RX_CTRL0;
 		*reg &= ~SW_CSI2RX_EN;
 		for (j = 0; j < RKISP_ISP_SW_REG_SIZE; j += 4) {
+			/* skip useless reg */
+			reg = reg_buf + j;
+			if (*reg == 0xdead00)
+				continue;
 			/* skip table RAM */
 			if ((j > ISP3X_LSC_CTRL && j < ISP3X_LSC_XGRAD_01) ||
-			    (j > ISP32_CAC_OFFSET && j < ISP3X_CAC_RO_CNT && dev->isp_ver != ISP_V33) ||
+			    (j > ISP32_CAC_OFFSET && j < ISP3X_CAC_RO_CNT &&
+			     dev->isp_ver != ISP_V33 && dev->isp_ver != ISP_V35) ||
 			    (j > ISP3X_3DLUT_UPDATE && j < ISP3X_GAIN_BASE) ||
 			    (j == 0x4840 || j == 0x4a80 || j == 0x4b40 || j == 0x5660) ||
 			    (dev->isp_ver == ISP_V39 &&
@@ -836,8 +843,6 @@ static const struct isp_clk_info rv1126b_isp_clk_rate[] = {
 		.clk_rate = 400,
 	}, {
 		.clk_rate = 500,
-	}, {
-		.clk_rate = 600,
 	}
 };
 
@@ -1009,9 +1014,25 @@ static const struct of_device_id rkisp_hw_of_match[] = {
 	{},
 };
 
-static inline bool is_iommu_enable(struct device *dev)
+static int rkisp_iommu_fault_handle(struct iommu_domain *iommu, struct device *iommu_dev,
+				    unsigned long iova, int status, void *arg)
 {
+	struct rkisp_hw_dev *hw_dev = arg;
+
+	dev_err(iommu_dev, "fault addr:0x%08lx status:%x arg:%p\n", iova, status, arg);
+	if (!hw_dev) {
+		dev_err(iommu_dev, "pagefault without device to handle\n");
+		return 0;
+	}
+	rockchip_iommu_mask_irq(hw_dev->dev);
+	return 0;
+}
+
+static inline bool is_iommu_enable(struct rkisp_hw_dev *hw_dev)
+{
+	struct device *dev = hw_dev->dev;
 	struct device_node *iommu;
+	struct iommu_domain *domain;
 
 	iommu = of_parse_phandle(dev->of_node, "iommus", 0);
 	if (!iommu) {
@@ -1024,6 +1045,9 @@ static inline bool is_iommu_enable(struct device *dev)
 	}
 	of_node_put(iommu);
 
+	domain = iommu_get_domain_for_dev(dev);
+	if (domain)
+		iommu_set_fault_handler(domain, rkisp_iommu_fault_handle, hw_dev);
 	return true;
 }
 
@@ -1148,9 +1172,10 @@ static void isp_config_clk(struct rkisp_hw_dev *dev, int on)
 	u32 val = !on ? 0 :
 		CIF_ICCL_ISP_CLK | CIF_ICCL_CP_CLK | CIF_ICCL_MRSZ_CLK |
 		CIF_ICCL_SRSZ_CLK | CIF_ICCL_JPEG_CLK | CIF_ICCL_MI_CLK |
-		CIF_ICCL_IE_CLK | CIF_ICCL_MIPI_CLK | CIF_ICCL_DCROP_CLK |
-		CIF_ICCL_SIMP_CLK | CIF_ICCL_SMIA_CLK;
+		CIF_ICCL_IE_CLK | CIF_ICCL_MIPI_CLK | CIF_ICCL_DCROP_CLK;
 
+	if (dev->isp_ver >= ISP_V33)
+		val |= CIF_ICCL_SIMP_CLK | CIF_ICCL_SMIA_CLK;
 	if ((dev->isp_ver == ISP_V20 || dev->isp_ver >= ISP_V30) && on)
 		val |= ICCL_MPFBC_CLK;
 	if (dev->isp_ver >= ISP_V32) {
@@ -1361,6 +1386,9 @@ static int rkisp_hw_probe(struct platform_device *pdev)
 	} else {
 		hw_dev->unite = ISP_UNITE_NONE;
 	}
+	hw_dev->unite_extend_pixel = 128;
+	if (hw_dev->isp_ver == ISP_V33 || hw_dev->isp_ver == ISP_V35)
+		hw_dev->unite_extend_pixel = 512;
 
 	hw_dev->vpsl_base_addr = NULL;
 	if (hw_dev->isp_ver == ISP_V35) {
@@ -1390,7 +1418,7 @@ static int rkisp_hw_probe(struct platform_device *pdev)
 		hw_dev->max_in.is_fix = true;
 		if (hw_dev->unite) {
 			hw_dev->max_in.w /= 2;
-			hw_dev->max_in.w += RKMOUDLE_UNITE_EXTEND_PIXEL;
+			hw_dev->max_in.w += hw_dev->unite_extend_pixel;
 		}
 	}
 	dev_info(dev, "max input:%dx%d@%dfps\n",
@@ -1460,7 +1488,7 @@ static int rkisp_hw_probe(struct platform_device *pdev)
 	hw_dev->is_dma_sg_ops = true;
 	hw_dev->is_buf_init = false;
 	hw_dev->is_shutdown = false;
-	hw_dev->is_mmu = is_iommu_enable(dev);
+	hw_dev->is_mmu = is_iommu_enable(hw_dev);
 	ret = of_reserved_mem_device_init(dev);
 	if (ret) {
 		is_mem_reserved = false;
@@ -1548,9 +1576,9 @@ void rkisp_hw_enum_isp_size(struct rkisp_hw_dev *hw_dev)
 		w = isp->isp_sdev.in_crop.width;
 		h = isp->isp_sdev.in_crop.height;
 		if (isp->unite_div > ISP_UNITE_DIV1)
-			w = w / 2 + RKMOUDLE_UNITE_EXTEND_PIXEL;
+			w = w / 2 + hw_dev->unite_extend_pixel;
 		if (isp->unite_div == ISP_UNITE_DIV4)
-			h = h / 2 + RKMOUDLE_UNITE_EXTEND_PIXEL;
+			h = h / 2 + hw_dev->unite_extend_pixel;
 		hw_dev->isp_size[i].w = w;
 		hw_dev->isp_size[i].h = h;
 		hw_dev->isp_size[i].size = w * h;
@@ -1673,8 +1701,8 @@ static void __exit rkisp_hw_drv_exit(void)
 	platform_driver_unregister(&rkisp_hw_drv);
 }
 
-#if defined(CONFIG_VIDEO_ROCKCHIP_THUNDER_BOOT_ISP) && !defined(CONFIG_INITCALL_ASYNC)
-subsys_initcall(rkisp_hw_drv_init);
+#if defined(CONFIG_VIDEO_ROCKCHIP_THUNDER_BOOT_ISP)
+subsys_initcall_sync(rkisp_hw_drv_init);
 #else
 module_init(rkisp_hw_drv_init);
 #endif

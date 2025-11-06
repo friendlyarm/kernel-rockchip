@@ -494,6 +494,7 @@
 
 	wireless_bluetooth: wireless-bluetooth {
 		compatible = "bluetooth-platdata";
+		bt_port = "/dev/ttyS7";
 		clocks = <&hym8563>;
 		clock-names = "ext_clock";
 		uart_rts_gpios = <&gpio3 RK_PC2 GPIO_ACTIVE_LOW>;
@@ -515,6 +516,14 @@
 		WIFI,poweren_gpio = <&gpio0 RK_PB2 GPIO_ACTIVE_HIGH>;
 		status = "okay";
 	};
+};
+
+&dfi {
+	status = "disabled";
+};
+
+&dmc {
+	status = "disabled";
 };
 
 &gmac0 {
@@ -658,7 +667,14 @@
 };
 
 &i2c7 {
-	status = "disabled";
+	status = "okay";
+	clock-frequency = <400000>;
+	pinctrl-names = "default";
+	pinctrl-0 = <&i2c7m0_xfer>;
+};
+
+&max96756 {
+	lock-gpios = <&gpio1 RK_PB1 GPIO_ACTIVE_HIGH>;
 };
 
 &pinctrl {
@@ -687,6 +703,12 @@
 
 		max96712_dphy3_lock: max96712-dphy3-lock {
 			rockchip,pins = <4 RK_PD4 RK_FUNC_GPIO &pcfg_pull_none_smt>;
+		};
+	};
+
+	max96756-dphy0 {
+		max96756_dphy0_lock: max96756-dphy0-lock {
+			rockchip,pins = <1 RK_PB1 RK_FUNC_GPIO &pcfg_pull_none_smt>;
 		};
 	};
 
@@ -766,6 +788,18 @@
 	};
 };
 
+&pmic_pins {
+	rockchip,pins =
+		/* pmic_int_l */
+		<0 RK_PA7 0 &pcfg_pull_up>,
+		/* pmic_sleep1 */
+		<0 RK_PA2 1 &pcfg_pull_none>,
+		/* pmic_sleep2 */
+		<0 RK_PA3 1 &pcfg_pull_none>,
+		/* pmic_sleep3 */
+		<0 RK_PC1 1 &pcfg_pull_none>;
+};
+
 &rockchip_suspend {
 	rockchip,sleep-mode-config = <
 		(0
@@ -823,6 +857,14 @@
 
 &u2phy3_host {
 	phy-supply = <&vcc5v0_host_usb30>;
+};
+
+&usbdp_phy0_u3 {
+	status = "disabled";
+};
+
+&usbdp_phy1_u3 {
+	status = "disabled";
 };
 
 &vdd_log_s0 {

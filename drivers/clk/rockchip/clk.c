@@ -836,4 +836,6 @@ void rockchip_clk_disable_unused(void)
 	}
 }
 EXPORT_SYMBOL_GPL(rockchip_clk_disable_unused);
+
+MODULE_LICENSE("GPL");
 #endif /* MODULE */

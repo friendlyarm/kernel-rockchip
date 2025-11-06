@@ -52,6 +52,8 @@
 		rkcif_mipi_lvds1= &rkcif_mipi_lvds1;
 		rkcif_mipi_lvds2= &rkcif_mipi_lvds2;
 		rkcif_mipi_lvds3= &rkcif_mipi_lvds3;
+		rkcif_mipi_lvds4= &rkcif_mipi_lvds4;
+		rkcif_mipi_lvds5= &rkcif_mipi_lvds5;
 		rkvdec0 = &rkvdec0;
 		rkvdec1 = &rkvdec1;
 		rkvenc0 = &rkvenc0;
@@ -2398,6 +2400,11 @@
 		};
 	};
 
+	dmcdbg: dmcdbg {
+		compatible = "rockchip,rk3588-dmcdbg";
+		status = "disabled";
+	};
+
 	firmware {
 		scmi: scmi {
 			compatible = "arm,scmi-smc";
@@ -2502,7 +2509,6 @@
 	rkcif_dvp: rkcif-dvp {
 		compatible = "rockchip,rkcif-dvp";
 		rockchip,hw = <&rkcif>;
-		iommus = <&rkcif_mmu>;
 		status = "disabled";
 	};
 
@@ -2515,7 +2521,6 @@
 	rkcif_mipi_lvds: rkcif-mipi-lvds {
 		compatible = "rockchip,rkcif-mipi-lvds";
 		rockchip,hw = <&rkcif>;
-		iommus = <&rkcif_mmu>;
 		status = "disabled";
 	};
 
@@ -2546,7 +2551,6 @@
 	rkcif_mipi_lvds1: rkcif-mipi-lvds1 {
 		compatible = "rockchip,rkcif-mipi-lvds";
 		rockchip,hw = <&rkcif>;
-		iommus = <&rkcif_mmu>;
 		status = "disabled";
 	};
 
@@ -2577,7 +2581,6 @@
 	rkcif_mipi_lvds2: rkcif-mipi-lvds2 {
 		compatible = "rockchip,rkcif-mipi-lvds";
 		rockchip,hw = <&rkcif>;
-		iommus = <&rkcif_mmu>;
 		status = "disabled";
 	};
 
@@ -2608,7 +2611,6 @@
 	rkcif_mipi_lvds3: rkcif-mipi-lvds3 {
 		compatible = "rockchip,rkcif-mipi-lvds";
 		rockchip,hw = <&rkcif>;
-		iommus = <&rkcif_mmu>;
 		status = "disabled";
 	};
 
@@ -2633,6 +2635,54 @@
 	rkcif_mipi_lvds3_sditf_vir3: rkcif-mipi-lvds3-sditf-vir3 {
 		compatible = "rockchip,rkcif-sditf";
 		rockchip,cif = <&rkcif_mipi_lvds3>;
+		status = "disabled";
+	};
+
+	rkcif_mipi_lvds4: rkcif-mipi-lvds4 {
+		compatible = "rockchip,rkcif-mipi-lvds";
+		rockchip,hw = <&rkcif>;
+		status = "disabled";
+	};
+
+	rkcif_mipi_lvds4_sditf: rkcif-mipi-lvds4-sditf {
+		compatible = "rockchip,rkcif-sditf";
+		rockchip,cif = <&rkcif_mipi_lvds4>;
+		status = "disabled";
+	};
+
+	rkcif_mipi_lvds4_sditf_vir1: rkcif-mipi-lvds4-sditf-vir1 {
+		compatible = "rockchip,rkcif-sditf";
+		rockchip,cif = <&rkcif_mipi_lvds4>;
+		status = "disabled";
+	};
+
+	rkcif_mipi_lvds4_sditf_vir2: rkcif-mipi-lvds4-sditf-vir2 {
+		compatible = "rockchip,rkcif-sditf";
+		rockchip,cif = <&rkcif_mipi_lvds4>;
+		status = "disabled";
+	};
+
+	rkcif_mipi_lvds4_sditf_vir3: rkcif-mipi-lvds4-sditf-vir3 {
+		compatible = "rockchip,rkcif-sditf";
+		rockchip,cif = <&rkcif_mipi_lvds4>;
+		status = "disabled";
+	};
+
+	rkcif_mipi_lvds5: rkcif-mipi-lvds5 {
+		compatible = "rockchip,rkcif-mipi-lvds";
+		rockchip,hw = <&rkcif>;
+		status = "disabled";
+	};
+
+	rkcif_mipi_lvds5_sditf: rkcif-mipi-lvds5-sditf {
+		compatible = "rockchip,rkcif-sditf";
+		rockchip,cif = <&rkcif_mipi_lvds5>;
+		status = "disabled";
+	};
+
+	rkcif_mipi_lvds5_sditf_vir1: rkcif-mipi-lvds5-sditf-vir1 {
+		compatible = "rockchip,rkcif-sditf";
+		rockchip,cif = <&rkcif_mipi_lvds5>;
 		status = "disabled";
 	};
 
@@ -2900,7 +2950,7 @@
 	};
 
 	gpu: gpu@fb000000 {
-		compatible = "arm,mali-bifrost";
+		compatible = "arm,mali-valhall";
 		reg = <0x0 0xfb000000 0x0 0x200000>;
 		interrupts = <GIC_SPI 94 IRQ_TYPE_LEVEL_HIGH>,
 			     <GIC_SPI 93 IRQ_TYPE_LEVEL_HIGH>,
@@ -4440,7 +4490,7 @@
 			opp-microvolt-L8 = <700000 700000 850000>,
 					   <700000 700000 850000>;
 		};
-		opp-950000000 {
+		opp-b-950000000 {
 			opp-supported-hw = <0x10 0xffff>;
 			opp-hz = /bits/ 64 <950000000>;
 			opp-microvolt = <850000 850000 850000>,

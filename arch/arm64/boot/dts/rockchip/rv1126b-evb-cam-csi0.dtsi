@@ -46,8 +46,20 @@
 			};
 
 			csi_dphy_input5: endpoint@6 {
-				reg = <5>;
+				reg = <6>;
 				remote-endpoint = <&gc8613_out>;
+				data-lanes = <1 2 3 4>;
+			};
+
+			csi_dphy_input6: endpoint@7 {
+				reg = <7>;
+				remote-endpoint = <&sc635hai_out>;
+				data-lanes = <1 2 3 4>;
+			};
+
+			csi_dphy_input7: endpoint@8 {
+				reg = <8>;
+				remote-endpoint = <&imx586_out>;
 				data-lanes = <1 2 3 4>;
 			};
 		};
@@ -109,6 +121,26 @@
 		};
 	};
 
+	imx586: imx586@1a {
+		compatible = "sony,imx586";
+		reg = <0x1a>;
+		clocks = <&cru CLK_MIPI0_OUT2IO>;
+		clock-names = "xvclk";
+		reset-gpios = <&gpio4 RK_PA7 GPIO_ACTIVE_HIGH>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&cam_clk0_pins>;
+		rockchip,camera-module-index = <0>;
+		rockchip,camera-module-facing = "back";
+		rockchip,camera-module-name = "default";
+		rockchip,camera-module-lens-name = "default";
+		port {
+			imx586_out: endpoint {
+				remote-endpoint = <&csi_dphy_input7>;
+				data-lanes = <1 2 3 4>;
+			};
+		};
+	};
+
 	sc450ai: sc450ai@30 {
 		compatible = "smartsens,sc450ai";
 		status = "okay";
@@ -148,6 +180,28 @@
 		port {
 			sc850sl_out: endpoint {
 				remote-endpoint = <&csi_dphy_input2>;
+				data-lanes = <1 2 3 4>;
+			};
+		};
+	};
+
+	sc635hai: sc635hai@30 {
+		compatible = "smartsens,sc635hai";
+		status = "okay";
+		reg = <0x30>;
+		clocks = <&cru CLK_MIPI0_OUT2IO>;
+		clock-names = "xvclk";
+		reset-gpios = <&gpio4 RK_PA7 GPIO_ACTIVE_HIGH>;
+		pwdn-gpios = <&gpio4 RK_PA2 GPIO_ACTIVE_HIGH>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&cam_clk0_pins>;
+		rockchip,camera-module-index = <0>;
+		rockchip,camera-module-facing = "back";
+		rockchip,camera-module-name = "default";
+		rockchip,camera-module-lens-name = "default";
+		port {
+			sc635hai_out: endpoint {
+				remote-endpoint = <&csi_dphy_input6>;
 				data-lanes = <1 2 3 4>;
 			};
 		};
