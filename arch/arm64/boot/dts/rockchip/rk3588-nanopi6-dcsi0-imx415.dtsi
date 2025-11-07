@@ -52,7 +52,7 @@
 
 		power-gpios = <&gpio1 RK_PD3 GPIO_ACTIVE_HIGH>;
 		reset-gpios = <&gpio1 RK_PD2 GPIO_ACTIVE_LOW>;
-		rockchip,camera-module-index = <0>;
+		rockchip,camera-module-index = <1>;
 		rockchip,camera-module-facing = "back";
 		rockchip,camera-module-name = "CMK-OT2022-PX1";
 		rockchip,camera-module-lens-name = "IR0147-50IRC-8M-F20";
@@ -120,7 +120,7 @@
 
 	port {
 		mipi2_lvds_sditf: endpoint {
-			remote-endpoint = <&isp0_vir0>;
+			remote-endpoint = <&isp1_vir0>;
 		};
 	};
 };
@@ -129,22 +129,22 @@
 	status = "okay";
 };
 
-&rkisp0 {
+&rkisp1 {
 	status = "okay";
 };
 
-&isp0_mmu {
+&isp1_mmu {
 	status = "okay";
 };
 
-&rkisp0_vir0 {
+&rkisp1_vir0 {
 	status = "okay";
 
 	port {
 		#address-cells = <1>;
 		#size-cells = <0>;
 
-		isp0_vir0: endpoint@0 {
+		isp1_vir0: endpoint@0 {
 			reg = <0>;
 			remote-endpoint = <&mipi2_lvds_sditf>;
 		};

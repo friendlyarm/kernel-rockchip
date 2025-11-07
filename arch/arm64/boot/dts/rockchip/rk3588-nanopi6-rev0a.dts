@@ -392,6 +392,7 @@ dsi1_pwm: &pwm11 {
 
 /* MIPI-CSI */
 #define ENABLE_MIPI_CSI0	1
+#define ENABLE_MIPI_DCSI0	1
 
 #if (ENABLE_MIPI_CSI0)
 #include "rk3588-nanopi6-csi0-imx415.dtsi"

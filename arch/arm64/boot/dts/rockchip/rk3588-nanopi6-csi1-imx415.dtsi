@@ -56,7 +56,7 @@
 
 		power-gpios = <&gpio2 RK_PC2 GPIO_ACTIVE_HIGH>;
 		reset-gpios = <&gpio2 RK_PC1 GPIO_ACTIVE_LOW>;
-		rockchip,camera-module-index = <0>;
+		rockchip,camera-module-index = <1>;
 		rockchip,camera-module-facing = "back";
 		rockchip,camera-module-name = "CMK-OT2022-PX1";
 		rockchip,camera-module-lens-name = "IR0147-50IRC-8M-F20";
