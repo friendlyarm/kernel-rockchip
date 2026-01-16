@@ -100,6 +100,7 @@ struct h5 {
 
 	struct gpio_desc *enable_gpio;
 	struct gpio_desc *device_wake_gpio;
+	int cts_wait_ms;
 };
 
 enum h5_driver_info {
@@ -213,6 +214,7 @@ static int h5_open(struct hci_uart *hu)
 {
 	struct h5 *h5;
 	const unsigned char sync[] = { 0x01, 0x7e };
+	int err;
 
 	BT_DBG("hu %p", hu);
 
@@ -241,6 +243,14 @@ static int h5_open(struct hci_uart *hu)
 		h5->vnd->open(h5);
 
 	set_bit(HCI_UART_INIT_PENDING, &hu->hdev_flags);
+
+	if (h5->cts_wait_ms > 0 && hci_uart_has_flow_control(hu)) {
+		err = serdev_device_wait_for_cts(hu->serdev, true, h5->cts_wait_ms);
+		if (err) {
+			BT_ERR("Failed to wait CTS: %d", err);
+			return -ENODEV;
+		}
+	}
 
 	/* Send initial sync request */
 	h5_link_control(hu, sync, sizeof(sync));
@@ -862,6 +872,10 @@ static int h5_serdev_probe(struct serdev_device *serdev)
 						       GPIOD_OUT_LOW);
 	if (IS_ERR(h5->device_wake_gpio))
 		return PTR_ERR(h5->device_wake_gpio);
+
+	device_property_read_u32(dev, "cts-detect-wait-ms", &h5->cts_wait_ms);
+	if (h5->cts_wait_ms > 10000)
+		h5->cts_wait_ms = 0;
 
 	return hci_uart_register_device(&h5->serdev_hu, &h5p);
 }
