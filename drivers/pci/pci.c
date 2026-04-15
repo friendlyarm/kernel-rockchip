@@ -851,6 +851,66 @@ struct resource *pci_find_resource(struct pci_dev *dev, struct resource *res)
 EXPORT_SYMBOL(pci_find_resource);
 
 /**
+ * pci_resource_name - Return the name of the PCI resource
+ * @dev: PCI device to query
+ * @i: index of the resource
+ *
+ * Return the standard PCI resource (BAR) name according to their index.
+ */
+const char *pci_resource_name(struct pci_dev *dev, unsigned int i)
+{
+	static const char * const bar_name[] = {
+		"BAR 0",
+		"BAR 1",
+		"BAR 2",
+		"BAR 3",
+		"BAR 4",
+		"BAR 5",
+		"ROM",
+#ifdef CONFIG_PCI_IOV
+		"VF BAR 0",
+		"VF BAR 1",
+		"VF BAR 2",
+		"VF BAR 3",
+		"VF BAR 4",
+		"VF BAR 5",
+#endif
+		"bridge window",	/* "io" included in %pR */
+		"bridge window",	/* "mem" included in %pR */
+		"bridge window",	/* "mem pref" included in %pR */
+	};
+	static const char * const cardbus_name[] = {
+		"BAR 1",
+		"unknown",
+		"unknown",
+		"unknown",
+		"unknown",
+		"unknown",
+#ifdef CONFIG_PCI_IOV
+		"unknown",
+		"unknown",
+		"unknown",
+		"unknown",
+		"unknown",
+		"unknown",
+#endif
+		"CardBus bridge window 0",	/* I/O */
+		"CardBus bridge window 1",	/* I/O */
+		"CardBus bridge window 0",	/* mem */
+		"CardBus bridge window 1",	/* mem */
+	};
+
+	if (dev->hdr_type == PCI_HEADER_TYPE_CARDBUS &&
+	    i < ARRAY_SIZE(cardbus_name))
+		return cardbus_name[i];
+
+	if (i < ARRAY_SIZE(bar_name))
+		return bar_name[i];
+
+	return "unknown";
+}
+
+/**
  * pci_wait_for_pending - wait for @mask bit(s) to clear in status word @pos
  * @dev: the PCI device to operate on
  * @pos: config space offset of status word
@@ -986,7 +1046,7 @@ static void pci_std_enable_acs(struct pci_dev *dev)
  * pci_enable_acs - enable ACS if hardware support it
  * @dev: the PCI device
  */
-static void pci_enable_acs(struct pci_dev *dev)
+void pci_enable_acs(struct pci_dev *dev)
 {
 	if (!pci_acs_enable)
 		goto disable_acs_redir;
@@ -1257,6 +1317,11 @@ int pci_power_up(struct pci_dev *dev)
 		return -EIO;
 	}
 
+	if (pci_dev_is_disconnected(dev)) {
+		dev->current_state = PCI_D3cold;
+		return -EIO;
+	}
+
 	pci_read_config_word(dev, dev->pm_cap + PCI_PM_CTRL, &pmcsr);
 	if (PCI_POSSIBLE_ERROR(pmcsr)) {
 		pci_err(dev, "Unable to change power state from %s to D0, device inaccessible\n",
@@ -1421,6 +1486,9 @@ static int pci_set_low_power_state(struct pci_dev *dev, pci_power_t state, bool 
 	if ((state == PCI_D1 && !dev->d1_support)
 	   || (state == PCI_D2 && !dev->d2_support))
 		return -EIO;
+
+	if (dev->current_state == state)
+		return 0;
 
 	pci_read_config_word(dev, dev->pm_cap + PCI_PM_CTRL, &pmcsr);
 	if (PCI_POSSIBLE_ERROR(pmcsr)) {
@@ -2475,7 +2543,7 @@ static void pci_pme_list_scan(struct work_struct *work)
 			 * course of the call.
 			 */
 			if (bdev) {
-				bref = pm_runtime_get_if_active(bdev, true);
+				bref = pm_runtime_get_if_active(bdev);
 				if (!bref)
 					continue;
 
@@ -3065,8 +3133,12 @@ static const struct dmi_system_id bridge_d3_blacklist[] = {
  * pci_bridge_d3_possible - Is it possible to put the bridge into D3
  * @bridge: Bridge to check
  *
- * This function checks if it is possible to move the bridge to D3.
- * Currently we only allow D3 for recent enough PCIe ports and Thunderbolt.
+ * Currently we only allow D3 for some PCIe ports and for Thunderbolt.
+ *
+ * Return: Whether it is possible to move the bridge to D3.
+ *
+ * The return value is guaranteed to be constant across the entire lifetime
+ * of the bridge, including its hot-removal.
  */
 bool pci_bridge_d3_possible(struct pci_dev *bridge)
 {
@@ -3347,6 +3419,7 @@ static struct resource *pci_ea_get_resource(struct pci_dev *dev, u8 bei,
 static int pci_ea_read(struct pci_dev *dev, int offset)
 {
 	struct resource *res;
+	const char *res_name;
 	int ent_size, ent_offset = offset;
 	resource_size_t start, end;
 	unsigned long flags;
@@ -3376,6 +3449,7 @@ static int pci_ea_read(struct pci_dev *dev, int offset)
 		goto out;
 
 	res = pci_ea_get_resource(dev, bei, prop);
+	res_name = pci_resource_name(dev, bei);
 	if (!res) {
 		pci_err(dev, "Unsupported EA entry BEI: %u\n", bei);
 		goto out;
@@ -3449,16 +3523,16 @@ static int pci_ea_read(struct pci_dev *dev, int offset)
 	res->flags = flags;
 
 	if (bei <= PCI_EA_BEI_BAR5)
-		pci_info(dev, "BAR %d: %pR (from Enhanced Allocation, properties %#02x)\n",
-			   bei, res, prop);
+		pci_info(dev, "%s %pR: from Enhanced Allocation, properties %#02x\n",
+			 res_name, res, prop);
 	else if (bei == PCI_EA_BEI_ROM)
-		pci_info(dev, "ROM: %pR (from Enhanced Allocation, properties %#02x)\n",
-			   res, prop);
+		pci_info(dev, "%s %pR: from Enhanced Allocation, properties %#02x\n",
+			 res_name, res, prop);
 	else if (bei >= PCI_EA_BEI_VF_BAR0 && bei <= PCI_EA_BEI_VF_BAR5)
-		pci_info(dev, "VF BAR %d: %pR (from Enhanced Allocation, properties %#02x)\n",
-			   bei - PCI_EA_BEI_VF_BAR0, res, prop);
+		pci_info(dev, "%s %pR: from Enhanced Allocation, properties %#02x\n",
+			 res_name, res, prop);
 	else
-		pci_info(dev, "BEI %d res: %pR (from Enhanced Allocation, properties %#02x)\n",
+		pci_info(dev, "BEI %d %pR: from Enhanced Allocation, properties %#02x\n",
 			   bei, res, prop);
 
 out:
@@ -3749,14 +3823,6 @@ bool pci_acs_path_enabled(struct pci_dev *start,
 void pci_acs_init(struct pci_dev *dev)
 {
 	dev->acs_cap = pci_find_ext_capability(dev, PCI_EXT_CAP_ID_ACS);
-
-	/*
-	 * Attempt to enable ACS regardless of capability because some Root
-	 * Ports (e.g. those quirked with *_intel_pch_acs_*) do not have
-	 * the standard ACS capability but still support ACS via those
-	 * quirks.
-	 */
-	pci_enable_acs(dev);
 }
 
 /**
@@ -5221,7 +5287,7 @@ int pci_bridge_wait_for_secondary_bus(struct pci_dev *dev, char *reset_type)
 		delay);
 	if (!pcie_wait_for_link_delay(dev, true, delay)) {
 		/* Did not train, no need to wait any further */
-		pci_info(dev, "Data Link Layer Link Active not set in 1000 msec\n");
+		pci_info(dev, "Data Link Layer Link Active not set in %d msec\n", delay);
 		return -ENOTTY;
 	}
 
@@ -5781,10 +5847,9 @@ unlock:
 /* Do any devices on or below this slot prevent a bus reset? */
 static bool pci_slot_resettable(struct pci_slot *slot)
 {
-	struct pci_dev *dev;
+	struct pci_dev *dev, *bridge = slot->bus->self;
 
-	if (slot->bus->self &&
-	    (slot->bus->self->dev_flags & PCI_DEV_FLAGS_NO_BUS_RESET))
+	if (bridge && (bridge->dev_flags & PCI_DEV_FLAGS_NO_BUS_RESET))
 		return false;
 
 	list_for_each_entry(dev, &slot->bus->devices, bus_list) {
@@ -5801,7 +5866,10 @@ static bool pci_slot_resettable(struct pci_slot *slot)
 /* Lock devices from the top of the tree down */
 static void pci_slot_lock(struct pci_slot *slot)
 {
-	struct pci_dev *dev;
+	struct pci_dev *dev, *bridge = slot->bus->self;
+
+	if (bridge)
+		pci_dev_lock(bridge);
 
 	list_for_each_entry(dev, &slot->bus->devices, bus_list) {
 		if (!dev->slot || dev->slot != slot)
@@ -5816,30 +5884,35 @@ static void pci_slot_lock(struct pci_slot *slot)
 /* Unlock devices from the bottom of the tree up */
 static void pci_slot_unlock(struct pci_slot *slot)
 {
-	struct pci_dev *dev;
+	struct pci_dev *dev, *bridge = slot->bus->self;
 
 	list_for_each_entry(dev, &slot->bus->devices, bus_list) {
 		if (!dev->slot || dev->slot != slot)
 			continue;
 		if (dev->subordinate)
 			pci_bus_unlock(dev->subordinate);
-		pci_dev_unlock(dev);
+		else
+			pci_dev_unlock(dev);
 	}
+
+	if (bridge)
+		pci_dev_unlock(bridge);
 }
 
 /* Return 1 on successful lock, 0 on contention */
 static int pci_slot_trylock(struct pci_slot *slot)
 {
-	struct pci_dev *dev;
+	struct pci_dev *dev, *bridge = slot->bus->self;
+
+	if (bridge && !pci_dev_trylock(bridge))
+		return 0;
 
 	list_for_each_entry(dev, &slot->bus->devices, bus_list) {
 		if (!dev->slot || dev->slot != slot)
 			continue;
 		if (dev->subordinate) {
-			if (!pci_bus_trylock(dev->subordinate)) {
-				pci_dev_unlock(dev);
+			if (!pci_bus_trylock(dev->subordinate))
 				goto unlock;
-			}
 		} else if (!pci_dev_trylock(dev))
 			goto unlock;
 	}
@@ -5855,6 +5928,9 @@ unlock:
 		else
 			pci_dev_unlock(dev);
 	}
+
+	if (bridge)
+		pci_dev_unlock(bridge);
 	return 0;
 }
 
@@ -6766,14 +6842,15 @@ static void pci_request_resource_alignment(struct pci_dev *dev, int bar,
 					   resource_size_t align, bool resize)
 {
 	struct resource *r = &dev->resource[bar];
+	const char *r_name = pci_resource_name(dev, bar);
 	resource_size_t size;
 
 	if (!(r->flags & IORESOURCE_MEM))
 		return;
 
 	if (r->flags & IORESOURCE_PCI_FIXED) {
-		pci_info(dev, "BAR%d %pR: ignoring requested alignment %#llx\n",
-			 bar, r, (unsigned long long)align);
+		pci_info(dev, "%s %pR: ignoring requested alignment %#llx\n",
+			 r_name, r, (unsigned long long)align);
 		return;
 	}
 
@@ -6809,8 +6886,8 @@ static void pci_request_resource_alignment(struct pci_dev *dev, int bar,
 	 * devices and we use the second.
 	 */
 
-	pci_info(dev, "BAR%d %pR: requesting alignment to %#llx\n",
-		 bar, r, (unsigned long long)align);
+	pci_info(dev, "%s %pR: requesting alignment to %#llx\n",
+		 r_name, r, (unsigned long long)align);
 
 	if (resize) {
 		r->start = 0;

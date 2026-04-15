@@ -56,7 +56,8 @@ static int nfs_return_empty_folio(struct folio *folio)
 {
 	folio_zero_segment(folio, 0, folio_size(folio));
 	folio_mark_uptodate(folio);
-	folio_unlock(folio);
+	if (nfs_netfs_folio_unlock(folio))
+		folio_unlock(folio);
 	return 0;
 }
 
@@ -332,13 +333,15 @@ out:
 int nfs_read_folio(struct file *file, struct folio *folio)
 {
 	struct inode *inode = file_inode(file);
+	loff_t pos = folio_pos(folio);
+	size_t len = folio_size(folio);
 	struct nfs_pageio_descriptor pgio;
 	struct nfs_open_context *ctx;
 	int ret;
 
-	trace_nfs_aop_readpage(inode, folio);
+	trace_nfs_aop_readpage(inode, pos, len);
 	nfs_inc_stats(inode, NFSIOS_VFSREADPAGE);
-	task_io_account_read(folio_size(folio));
+	task_io_account_read(len);
 
 	/*
 	 * Try to flush any pending writes to the file..
@@ -381,7 +384,7 @@ int nfs_read_folio(struct file *file, struct folio *folio)
 out_put:
 	put_nfs_open_context(ctx);
 out:
-	trace_nfs_aop_readpage_done(inode, folio, ret);
+	trace_nfs_aop_readpage_done(inode, pos, len, ret);
 	return ret;
 out_unlock:
 	folio_unlock(folio);

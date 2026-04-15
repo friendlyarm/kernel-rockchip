@@ -324,8 +324,7 @@ batadv_iv_ogm_aggr_packet(int buff_pos, int packet_len,
 	/* check if there is enough space for the optional TVLV */
 	next_buff_pos += ntohs(ogm_packet->tvlv_len);
 
-	return (next_buff_pos <= packet_len) &&
-	       (next_buff_pos <= BATADV_MAX_AGGREGATION_BYTES);
+	return next_buff_pos <= packet_len;
 }
 
 /* send a batman ogm to a given interface */
@@ -463,6 +462,9 @@ batadv_iv_ogm_can_aggregate(const struct batadv_ogm_packet *new_bat_ogm_packet,
 	 */
 	if (!time_before(send_time, forw_packet->send_time) ||
 	    !time_after_eq(aggregation_end_time, forw_packet->send_time))
+		return false;
+
+	if (skb_tailroom(forw_packet->skb) < packet_len)
 		return false;
 
 	if (aggregated_bytes > BATADV_MAX_AGGREGATION_BYTES)

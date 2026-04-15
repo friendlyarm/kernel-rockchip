@@ -20,6 +20,7 @@
 #include <linux/utsname.h>
 #include <linux/sched/mm.h>
 #include <linux/netfs.h>
+#include <linux/fcntl.h>
 #include "cifs_fs_sb.h"
 #include "cifsacl.h"
 #include <crypto/internal/hash.h>
@@ -677,6 +678,7 @@ inc_rfc1001_len(void *buf, int count)
 struct TCP_Server_Info {
 	struct list_head tcp_ses_list;
 	struct list_head smb_ses_list;
+	struct list_head rlist; /* reconnect list */
 	spinlock_t srv_lock;  /* protect anything here that is not protected */
 	__u64 conn_id; /* connection identifier (useful for debugging) */
 	int srv_count; /* reference counter */
@@ -702,7 +704,7 @@ struct TCP_Server_Info {
 	bool nosharesock;
 	bool tcp_nodelay;
 	bool terminate;
-	unsigned int credits;  /* send no more requests at once */
+	int credits;  /* send no more requests at once */
 	unsigned int max_credits; /* can override large 32000 default at mnt */
 	unsigned int in_flight;  /* number of requests on the wire to server */
 	unsigned int max_in_flight; /* max number of requests that were on wire */
@@ -739,8 +741,10 @@ struct TCP_Server_Info {
 	char workstation_RFC1001_name[RFC1001_NAME_LEN_WITH_NULL];
 	__u32 sequence_number; /* for signing, protected by srv_mutex */
 	__u32 reconnect_instance; /* incremented on each reconnect */
+	__le32 session_key_id; /* retrieved from negotiate response and send in session setup request */
 	struct session_key session_key;
 	unsigned long lstrp; /* when we got last response from this server */
+	unsigned long neg_start; /* when negotiate started (jiffies) */
 	struct cifs_secmech secmech; /* crypto sec mech functs, descriptors */
 #define	CIFS_NEGFLAVOR_UNENCAP	1	/* wct == 17, but no ext_sec */
 #define	CIFS_NEGFLAVOR_EXTENDED	2	/* wct == 17, ext_sec bit set */
@@ -782,7 +786,7 @@ struct TCP_Server_Info {
 	} compression;
 	__u16	signing_algorithm;
 	__le16	cipher_type;
-	 /* save initital negprot hash */
+	 /* save initial negprot hash */
 	__u8	preauth_sha_hash[SMB2_PREAUTH_HASH_SIZE];
 	bool	signing_negotiated; /* true if valid signing context rcvd from server */
 	bool	posix_ext_supported;
@@ -827,6 +831,7 @@ struct TCP_Server_Info {
 	 * format: \\HOST\SHARE[\OPTIONAL PATH]
 	 */
 	char *leaf_fullpath;
+	bool dfs_conn:1;
 };
 
 static inline bool is_smb1(struct TCP_Server_Info *server)
@@ -1053,6 +1058,7 @@ struct cifs_chan {
 };
 
 #define CIFS_SES_FLAG_SCALE_CHANNELS (0x1)
+#define CIFS_SES_FLAGS_PENDING_QUERY_INTERFACES (0x2)
 
 /*
  * Session structure.  One of these for each uid session with a particular host
@@ -1061,6 +1067,7 @@ struct cifs_ses {
 	struct list_head smb_ses_list;
 	struct list_head rlist; /* reconnect list */
 	struct list_head tcon_list;
+	struct list_head dlist; /* dfs list */
 	struct cifs_tcon *tcon_ipc;
 	spinlock_t ses_lock;  /* protect anything here that is not protected */
 	struct mutex session_mutex;
@@ -1265,6 +1272,7 @@ struct cifs_tcon {
 	bool use_persistent:1; /* use persistent instead of durable handles */
 	bool no_lease:1;    /* Do not request leases on files or directories */
 	bool use_witness:1; /* use witness protocol */
+	bool dummy:1; /* dummy tcon used for reconnecting channels */
 	__le32 capabilities;
 	__u32 share_flags;
 	__u32 maximal_access;
@@ -1289,6 +1297,7 @@ struct cifs_tcon {
 	/* BB add field for back pointer to sb struct(s)? */
 #ifdef CONFIG_CIFS_DFS_UPCALL
 	struct delayed_work dfs_cache_work;
+	struct list_head dfs_ses_list;
 #endif
 	struct delayed_work	query_interfaces; /* query interfaces workqueue job */
 	char *origin_fullpath; /* canonical copy of smb3_fs_context::source */
@@ -2344,6 +2353,16 @@ static inline bool cifs_ses_exiting(struct cifs_ses *ses)
 	ret = ses->ses_status == SES_EXITING;
 	spin_unlock(&ses->ses_lock);
 	return ret;
+}
+
+static inline int cifs_open_create_options(unsigned int oflags, int opts)
+{
+	/* O_SYNC also has bit for O_DSYNC so following check picks up either */
+	if (oflags & O_SYNC)
+		opts |= CREATE_WRITE_THROUGH;
+	if (oflags & O_DIRECT)
+		opts |= CREATE_NO_BUFFER;
+	return opts;
 }
 
 #endif	/* _CIFS_GLOB_H */
