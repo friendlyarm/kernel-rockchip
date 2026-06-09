@@ -420,11 +420,9 @@ static int rockchip_usb2phy_extcon_register(struct rockchip_usb2phy *rphy)
 
 	if (of_property_read_bool(node, "extcon")) {
 		edev = extcon_get_edev_by_phandle(rphy->dev, 0);
-		if (IS_ERR(edev)) {
-			if (PTR_ERR(edev) != -EPROBE_DEFER)
-				dev_err(rphy->dev, "Invalid or missing extcon\n");
-			return PTR_ERR(edev);
-		}
+		if (IS_ERR(edev))
+			return dev_err_probe(rphy->dev, PTR_ERR(edev),
+					     "invalid or missing extcon\n");
 	} else {
 		/* Initialize extcon device */
 		edev = devm_extcon_dev_allocate(rphy->dev,
@@ -434,10 +432,9 @@ static int rockchip_usb2phy_extcon_register(struct rockchip_usb2phy *rphy)
 			return -ENOMEM;
 
 		ret = devm_extcon_dev_register(rphy->dev, edev);
-		if (ret) {
-			dev_err(rphy->dev, "failed to register extcon device\n");
-			return ret;
-		}
+		if (ret)
+			return dev_err_probe(rphy->dev, ret,
+					     "failed to register extcon device\n");
 	}
 
 	rphy->edev = edev;
@@ -789,17 +786,20 @@ static void rockchip_chg_detect_work(struct work_struct *work)
 		container_of(work, struct rockchip_usb2phy_port, chg_work.work);
 	struct rockchip_usb2phy *rphy = dev_get_drvdata(rport->phy->dev.parent);
 	struct regmap *base = get_reg_base(rphy);
-	bool is_dcd, tmout, vout;
+	bool is_dcd, tmout, vout, vbus_attach;
 	unsigned long delay;
+
+	vbus_attach = property_enabled(rphy->grf, &rport->port_cfg->utmi_bvalid);
 
 	dev_dbg(&rport->phy->dev, "chg detection work state = %d\n",
 		rphy->chg_state);
 	switch (rphy->chg_state) {
 	case USB_CHG_STATE_UNDEFINED:
-		if (!rport->suspended)
+		if (!rport->suspended && !vbus_attach)
 			rockchip_usb2phy_power_off(rport->phy);
 		/* put the controller in non-driving mode */
-		property_enable(base, &rphy->phy_cfg->chg_det.opmode, false);
+		if (!vbus_attach)
+			property_enable(base, &rphy->phy_cfg->chg_det.opmode, false);
 		/* Start DCD processing stage 1 */
 		rockchip_chg_enable_dcd(rphy, true);
 		rphy->chg_state = USB_CHG_STATE_WAIT_FOR_DCD;
@@ -862,7 +862,8 @@ static void rockchip_chg_detect_work(struct work_struct *work)
 		fallthrough;
 	case USB_CHG_STATE_DETECTED:
 		/* put the controller in normal mode */
-		property_enable(base, &rphy->phy_cfg->chg_det.opmode, true);
+		if (!vbus_attach)
+			property_enable(base, &rphy->phy_cfg->chg_det.opmode, true);
 		rockchip_usb2phy_otg_sm_work(&rport->otg_sm_work.work);
 		dev_dbg(&rport->phy->dev, "charger = %s\n",
 			 chg_to_string(rphy->chg_type));
@@ -1211,10 +1212,10 @@ static int rockchip_usb2phy_host_port_init(struct rockchip_usb2phy *rphy,
 					   struct device_node *child_np)
 {
 	int ret;
+	struct regmap *base = get_reg_base(rphy);
 
 	rport->port_id = USB2PHY_PORT_HOST;
 	rport->port_cfg = &rphy->phy_cfg->port_cfgs[USB2PHY_PORT_HOST];
-	rport->suspended = true;
 
 	mutex_init(&rport->mutex);
 	INIT_DELAYED_WORK(&rport->sm_work, rockchip_usb2phy_sm_work);
@@ -1224,6 +1225,16 @@ static int rockchip_usb2phy_host_port_init(struct rockchip_usb2phy *rphy,
 		dev_err(rphy->dev, "failed to setup host irq\n");
 		return ret;
 	}
+
+	/*
+	 * Let us put phy-port into suspend mode here for saving power
+	 * consumption, and usb controller will resume it during probe
+	 * time if needed.
+	 */
+	ret = property_enable(base, &rport->port_cfg->phy_sus, true);
+	if (ret)
+		return ret;
+	rport->suspended = true;
 
 	return 0;
 }
@@ -1244,18 +1255,12 @@ static int rockchip_usb2phy_otg_port_init(struct rockchip_usb2phy *rphy,
 					  struct device_node *child_np)
 {
 	int ret, id;
+	struct regmap *base = get_reg_base(rphy);
 
 	rport->port_id = USB2PHY_PORT_OTG;
 	rport->port_cfg = &rphy->phy_cfg->port_cfgs[USB2PHY_PORT_OTG];
 	rport->state = OTG_STATE_UNDEFINED;
 
-	/*
-	 * set suspended flag to true, but actually don't
-	 * put phy in suspend mode, it aims to enable usb
-	 * phy and clock in power_on() called by usb controller
-	 * driver during probe.
-	 */
-	rport->suspended = true;
 	rport->vbus_attached = false;
 
 	mutex_init(&rport->mutex);
@@ -1263,7 +1268,6 @@ static int rockchip_usb2phy_otg_port_init(struct rockchip_usb2phy *rphy,
 	rport->mode = of_usb_get_dr_mode_by_phy(child_np, -1);
 	if (rport->mode == USB_DR_MODE_HOST ||
 	    rport->mode == USB_DR_MODE_UNKNOWN) {
-		ret = 0;
 		goto out;
 	}
 
@@ -1273,7 +1277,7 @@ static int rockchip_usb2phy_otg_port_init(struct rockchip_usb2phy *rphy,
 	ret = rockchip_usb2phy_port_irq_init(rphy, rport, child_np);
 	if (ret) {
 		dev_err(rphy->dev, "failed to init irq for host port\n");
-		goto out;
+		return ret;
 	}
 
 	if (!IS_ERR(rphy->edev)) {
@@ -1283,7 +1287,7 @@ static int rockchip_usb2phy_otg_port_init(struct rockchip_usb2phy *rphy,
 					EXTCON_USB_HOST, &rport->event_nb);
 		if (ret) {
 			dev_err(rphy->dev, "register USB HOST notifier failed\n");
-			goto out;
+			return ret;
 		}
 
 		if (!of_property_read_bool(rphy->dev->of_node, "extcon")) {
@@ -1294,7 +1298,17 @@ static int rockchip_usb2phy_otg_port_init(struct rockchip_usb2phy *rphy,
 	}
 
 out:
-	return ret;
+	/*
+	 * Let us put phy-port into suspend mode here for saving power
+	 * consumption, and usb controller will resume it during probe
+	 * time if needed.
+	 */
+	ret = property_enable(base, &rport->port_cfg->phy_sus, true);
+	if (ret)
+		return ret;
+	rport->suspended = true;
+
+	return 0;
 }
 
 static int rockchip_usb2phy_probe(struct platform_device *pdev)
@@ -1392,10 +1406,8 @@ static int rockchip_usb2phy_probe(struct platform_device *pdev)
 	}
 
 	ret = rockchip_usb2phy_clk480m_register(rphy);
-	if (ret) {
-		dev_err(dev, "failed to register 480m output clock\n");
-		return ret;
-	}
+	if (ret)
+		return dev_err_probe(dev, ret, "failed to register 480m output clock\n");
 
 	if (rphy->phy_cfg->phy_tuning) {
 		ret = rphy->phy_cfg->phy_tuning(rphy);
@@ -1415,8 +1427,7 @@ static int rockchip_usb2phy_probe(struct platform_device *pdev)
 
 		phy = devm_phy_create(dev, child_np, &rockchip_usb2phy_ops);
 		if (IS_ERR(phy)) {
-			dev_err_probe(dev, PTR_ERR(phy), "failed to create phy\n");
-			ret = PTR_ERR(phy);
+			ret = dev_err_probe(dev, PTR_ERR(phy), "failed to create phy\n");
 			goto put_child;
 		}
 
@@ -1453,9 +1464,8 @@ next_child:
 						"rockchip_usb2phy",
 						rphy);
 		if (ret) {
-			dev_err(rphy->dev,
-				"failed to request usb2phy irq handle\n");
-			goto put_child;
+			dev_err_probe(rphy->dev, ret, "failed to request usb2phy irq handle\n");
+			return ret;
 		}
 	}
 
@@ -1698,7 +1708,7 @@ static const struct rockchip_usb2phy_cfg rk3399_phy_cfgs[] = {
 		.clkout_ctl	= { 0xe450, 4, 4, 1, 0 },
 		.port_cfgs	= {
 			[USB2PHY_PORT_OTG] = {
-				.phy_sus	= { 0xe454, 1, 0, 2, 1 },
+				.phy_sus = { 0xe454, 8, 0, 0x052, 0x1d1 },
 				.bvalid_det_en	= { 0xe3c0, 3, 3, 0, 1 },
 				.bvalid_det_st	= { 0xe3e0, 3, 3, 0, 1 },
 				.bvalid_det_clr	= { 0xe3d0, 3, 3, 0, 1 },
@@ -1737,7 +1747,7 @@ static const struct rockchip_usb2phy_cfg rk3399_phy_cfgs[] = {
 		.clkout_ctl	= { 0xe460, 4, 4, 1, 0 },
 		.port_cfgs	= {
 			[USB2PHY_PORT_OTG] = {
-				.phy_sus        = { 0xe464, 1, 0, 2, 1 },
+				.phy_sus = { 0xe464, 8, 0, 0x052, 0x1d1 },
 				.bvalid_det_en  = { 0xe3c0, 8, 8, 0, 1 },
 				.bvalid_det_st  = { 0xe3e0, 8, 8, 0, 1 },
 				.bvalid_det_clr = { 0xe3d0, 8, 8, 0, 1 },
