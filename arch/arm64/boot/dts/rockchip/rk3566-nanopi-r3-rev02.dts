@@ -7,6 +7,8 @@
 /dts-v1/;
 #include "rk3566-nanopi-r3-rev01.dts"
 
+/delete-node/ &vconn;
+
 / {
 	model = "FriendlyElec NanoPi R3S LTS";
 	compatible = "friendlyelec,nanopi-r3s", "rockchip,rk3568";
@@ -15,6 +17,27 @@
 &mach {
 	hwrev = <2>;
 	model = "NanoPi R3S LTS";
+};
+
+&hdmi_in_vp0 {
+	status = "okay";
+	remote-endpoint = <&vp0_out_hdmi>;
+};
+
+&hdmi_sound {
+	status = "okay";
+};
+
+&hdmi {
+	status = "okay";
+};
+
+&route_hdmi {
+	status = "okay";
+};
+
+&vp0_out_hdmi {
+	remote-endpoint = <&hdmi_in_vp0>;
 };
 
 &i2c1 {
