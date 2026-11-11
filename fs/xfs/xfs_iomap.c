@@ -1114,7 +1114,6 @@ convert_delay:
 	return 0;
 
 found_cow:
-	xfs_iunlock(ip, XFS_ILOCK_EXCL);
 	if (imap.br_startoff <= offset_fsb) {
 		error = xfs_bmbt_to_iomap(ip, srcmap, &imap, flags, 0);
 		if (error)
